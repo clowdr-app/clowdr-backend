@@ -705,7 +705,7 @@ app.get("/slack/auth", async (req, res) => {
 
         await installTo.save();
         // res.send("Installation success. Please email Jonathan Bell at jon@jonbell.net to complete setup.");
-        res.redirect("https://www.clowdr.org/beta_success");
+        res.redirect("https://www.clowdr.org/beta_success.html");
     })
 });
 async function checkToken(token) {
