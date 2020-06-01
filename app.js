@@ -662,14 +662,22 @@ app.get("/slack/auth", async (req, res) => {
         // console.log(resp.data);
         // console.log(req.query.code);
         if (!resp.data.ok) {
-            res.send(403, resp.data);
+            return res.send(403, resp.data);
         }
         let q = new Parse.Query(ClowdrInstance);
+        console.log("Signup:")
+        console.log(resp.data);
         q.equalTo("pendingWorkspaceName", resp.data.team.name);
         let q2 = new Parse.Query(ClowdrInstance);
         q2.equalTo("slackWorkspace", resp.data.team.id);
         let mainQ = Parse.Query.or(q, q2);
         let installTo = await mainQ.first();
+        if(!installTo){
+            installTo = new ClowdrInstance();
+            installTo.set("slackWorkspace", resp.data.team.id);
+            installTo.set("conferenceName", resp.data.team.name)
+            await installTo.save();
+        }
 
         installTo.set("slackWorkspace", resp.data.team.id);
         installTo.set("pendingWorkspaceName", null);
@@ -682,7 +690,7 @@ app.get("/slack/auth", async (req, res) => {
 
 
         await installTo.save();
-        res.send("OK");
+        res.send("Installation success. Please email Jonathan Bell at jon@jonbell.net to complete setup.");
     })
 });
 async function checkToken(token) {
