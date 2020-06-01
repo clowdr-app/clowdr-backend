@@ -28,6 +28,9 @@ Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE
 Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
 
 
+const masterTwilioClient = Twilio(process.env.TWILIO_MASTER_SID,process.env.TWILIO_MASTER_AUTH_TOKEN);
+
+
 const app = express();
 app.use(cors())
 app.use('/slack/events', slackEvents.expressMiddleware());
@@ -677,6 +680,18 @@ app.get("/slack/auth", async (req, res) => {
             installTo.set("slackWorkspace", resp.data.team.id);
             installTo.set("conferenceName", resp.data.team.name)
             await installTo.save();
+            //create the sub account
+            let account = await masterTwilioClient.api.accounts.create({friendlyName: installTo.id+": "+resp.data.team.name});
+            let newAuthToken = account.authToken;
+            let newSID = account.sid;
+
+            let tempClient = Twilio(newSID, newAuthToken);
+            let new_key = await tempClient.newKeys.create();
+            await addOrReplaceConfig(installTo, "TWILIO_API_KEY", new_key.sid);
+            await addOrReplaceConfig(installTo, "TWILIO_API_SECRET", new_key.secret);
+            await addOrReplaceConfig(installTo, "TWILIO_ACCOUNT_SID", newSID);
+            await addOrReplaceConfig(installTo, "TWILIO_AUTH_TOKEN", newAuthToken);
+            await addOrReplaceConfig(installTo, "TWILIO_ROOM_TYPE", "peer-to-peer")
         }
 
         installTo.set("slackWorkspace", resp.data.team.id);
@@ -690,7 +705,8 @@ app.get("/slack/auth", async (req, res) => {
 
 
         await installTo.save();
-        res.send("Installation success. Please email Jonathan Bell at jon@jonbell.net to complete setup.");
+        // res.send("Installation success. Please email Jonathan Bell at jon@jonbell.net to complete setup.");
+        res.redirect("https://www.clowdr.org/beta_success");
     })
 });
 async function checkToken(token) {
