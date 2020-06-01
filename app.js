@@ -434,7 +434,7 @@ function sendMessageWithLinkToUser(response_url, messageText, linkText, link){
 
     return axios.post(response_url, message);
 }
-async function sendJoinLinkToUser(body, roomName) {
+async function sendJoinLinkToUser(body, roomName, peerToPeer) {
     if(!roomName)
     {
         respondWithError(body.response_url, "You need to specify a room name");
@@ -458,7 +458,7 @@ async function sendJoinLinkToUser(body, roomName) {
     try {
         twilioRoom = await twilio.video.rooms.create({
             // type: "peer-to-peer", //TESTING
-            type: conf.config.TWILIO_ROOM_TYPE,
+            type: (peerToPeer ? "peer-to-peer" : conf.config.TWILIO_ROOM_TYPE),
             uniqueName: roomName,
             statusCallback: conf.config.TWILIO_CALLBACK_URL
         });
@@ -547,7 +547,7 @@ async function slackSlashCommand(req, res, next) {
     //     console.log(req.body);
     //     await sendLoginLinkToUser(conf, req.body);
     // }
-    if (req.body.command === '/video_t' || req.body.command === '/video') {
+    if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoP2P') {
         res.send();
         //Are we in a private channel?
 
@@ -565,7 +565,7 @@ async function slackSlashCommand(req, res, next) {
         //     return;
         // }
         if (req.body.text) {
-            await sendJoinLinkToUser(req.body, req.body.text);
+            await sendJoinLinkToUser(req.body, req.body.text, (req.body.command === "/videoP2P"));
         }
         else {
             const parseUser = await getOrCreateParseUser(req.body.user_id, conf, conf.config.slackClient);
