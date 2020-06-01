@@ -662,14 +662,13 @@ app.get("/slack/auth", async (req, res) => {
         client_secret: process.env.SLACK_CLIENT_SECRET,
         code: req.query.code
     })).then(async (resp) => {
-        // console.log(resp.data);
+        console.log("Signup:")
+        console.log(resp.data);
         // console.log(req.query.code);
         if (!resp.data.ok) {
             return res.send(403, resp.data);
         }
         let q = new Parse.Query(ClowdrInstance);
-        console.log("Signup:")
-        console.log(resp.data);
         q.equalTo("pendingWorkspaceName", resp.data.team.name);
         let q2 = new Parse.Query(ClowdrInstance);
         q2.equalTo("slackWorkspace", resp.data.team.id);
