@@ -203,7 +203,7 @@ async function getConfig(conf) {
     // console.log(JSON.stringify(config,null,2))
     return config;
 }
-function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID){
+async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID){
     if(conf.rooms.length == 0){
         blocks.push({
             type: "section",
@@ -218,7 +218,7 @@ function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID){
         type: "section",
         text: {
             type: "mrkdwn",
-            text: conf.get("shortName") + " participants are hanging out in the following video chats. " +
+            text: conf.rooms.length + " video room" + (conf.rooms.length > 1 ? 's' : '') + " are up right now. " +
                 "Join one of these, or create a new room by sending a new message `/video [name of room to join or create]`"
         }
     })
@@ -226,7 +226,8 @@ function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID){
         let membersString = "";
         if (room.get("members")) {
             for (let member of room.get("members")) {
-                membersString += "<@" + member.get("slackID") + ">,"
+                if(member.get("slackID"))
+                    membersString += "<@" + member.get("slackID") + ">,"
             }
         }
         if (membersString.length > 0) {
@@ -236,7 +237,7 @@ function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID){
         }
         let joinAccy;
 
-        const link = buildLink(room.id, room.get("title"), parseUser, conf, teamID);
+        const link = await buildLink(room.id, room.get("title"), parseUser, conf, teamID);
         joinAccy = {
             type: "button",
             action_id: "join_video",
@@ -354,7 +355,7 @@ async function generateHome(conf, parseUser, teamID) {
         type: 'divider'
     });
 
-    pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID);
+    await pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID);
 
     let view = {
         type: 'home',
@@ -387,8 +388,6 @@ async function buildLink(roomID,roomName, parseUser, conf, teamID) {
         roomName: roomName,
     }, process.env.CLOWDR_JWT_KEY, {expiresIn: '8h'});
 
-    // console.log("WOrking to make a link for " + parseUser.get("displayname") +", " + parseUser.id)
-
     link = link + '/fromSlack/' + encodeURI(teamID) + '/' + encodeURI(roomName) + '/' +
         encodeURI(token);
     return link;
@@ -405,34 +404,34 @@ function respondWithError(response_url, error) {
 }
 function sendMessageWithLinkToUser(response_url, messageText, linkText, link){
     const message = {
-        "text": messageText+". <"+link+"|"+linkText+">",
+        "text": messageText, //+". <"+link+"|"+linkText+">",
         "response_type": "ephemeral",
         // Block Kit Builder - http://j.mp/bolt-starter-msg-json
-        // "blocks": [
-        //     {
-        //         "type": "section",
-        //         "text": {
-        //             "type": "mrkdwn",
-        //             "text": messageText+". <"+link+"|"+linkText+">",
-        //         }
-        //     },
-            // {
-            //     "type": "actions",
-            //     "block_id": "actions1",
-            //     "elements": [
-            //
-            //         {
-            //             "type": "button",
-            //             "text": {
-            //                 "type": "plain_text",
-            //                 "text": linkText
-            //             },
-            //             "action_id": "join_call_clicked",
-            //             "value": "click_me_123",
-            //             "url": link
-            //         }]
-            // }
-        // ]
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": messageText//+". <"+link+"|"+linkText+">",
+                }
+            },
+            {
+                "type": "actions",
+                "block_id": "actions1",
+                "elements": [
+
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": linkText
+                        },
+                        "action_id": "join_call_clicked",
+                        "value": "click_me_123",
+                        "url": link
+                    }]
+            }
+        ]
     };
 
     return axios.post(response_url, message);
@@ -574,7 +573,7 @@ async function slackSlashCommand(req, res, next) {
             const parseUser = await getOrCreateParseUser(req.body.user_id, conf, conf.config.slackClient);
             let blocks = [];
 
-            pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, req.body.team_id);
+            await pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, req.body.team_id);
             const message = {
                 "text": "Live video information",
                 "response_type": "ephemeral",
