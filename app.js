@@ -550,7 +550,7 @@ async function slackSlashCommand(req, res, next) {
     //     console.log(req.body);
     //     await sendLoginLinkToUser(conf, req.body);
     // }
-    if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoP2P') {
+    if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videop2p') {
         res.send();
         //Are we in a private channel?
 
