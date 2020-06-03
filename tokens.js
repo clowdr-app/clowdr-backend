@@ -20,7 +20,6 @@ const videoToken = (identity, room, config) => {
   } else {
     videoGrant = new VideoGrant();
   }
-  console.log("Creating token for " + room + ", " + identity + ", config: " + config.TWILIO_ACCOUNT_SID);
   const token = generateToken(config);
   token.addGrant(videoGrant);
   token.identity = identity;
