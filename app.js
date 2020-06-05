@@ -182,13 +182,14 @@ function getAllUsers() {
 }
 
 async function addNewUsersFromSlack(conf) {
-    return;
     try {
         let slackUsers = await conf.config.slackClient.users.list();
         let userMap = await getAllUsers();
 
         let confRole = await getOrCreateRole(conf.id, "conference");
-        let existingUsers = await confRole.getUsers().query().find({useMasterKey: true});
+        let existingQ = confRole.getUsers().query();
+        existingQ.limit(1000)
+        let existingUsers = await existingQ.find({useMasterKey: true});
         let roleUsersByID = {};
         existingUsers.map((u) => {
             roleUsersByID[u.id] = 1
@@ -201,17 +202,24 @@ async function addNewUsersFromSlack(conf) {
         if (slackUsers.members) {
             for (let user of slackUsers.members) {
                 let email = user.profile.email;
+                let debug = false;
                 if (email) {
                     let parseUser = userMap[email];
                     if (!parseUser) {
-                        // promises.push(createParseUserAndEnsureRole(user, conf, confRole).catch((e)=>{
-// console.log(e);
-//                        }));
+                        promises.push(createParseUserAndEnsureRole(user, conf, confRole).catch((e)=>{
+console.log(e);
+                       }));
                     } else {
                         //exists, just make sure that the role exists
                         if (!roleUsersByID[parseUser.id]) {
+                            if(debug){
+                                console.log("adding team role")
+                            }
                             await ensureUserHasTeamRole(parseUser, conf, confRole);
                             roleUsersByID[parseUser.id] = 1;
+                        }
+                        else if(debug){
+                            console.log("already has role")
                         }
                         let changed = false;
                         if (!parseUser.get("slackID")) {
@@ -470,11 +478,14 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
 
 async function ensureUserHasTeamRole(user, conf, role) {
     let confID = conf.id;
-    // console.log("EUHTR")
-    // console.log(user);
     // console.trace()
     if (userToWorkspaces[user.id] && userToWorkspaces[user.id][conf.id]) {
         return;
+    }
+    let debug =false;
+    if(debug) {
+        console.log("EUHTR")
+        console.log(user.id);
     }
     try {
         //Check in DB
@@ -490,6 +501,8 @@ async function ensureUserHasTeamRole(user, conf, role) {
         if (!roles || roles.length == 0) {
             role.getUsers().add(user);
             await role.save({}, {useMasterKey: true});
+        }else if(debug){
+            console.log("Already has role? "+ user.id)
         }
         if (!userToWorkspaces[user.id]) {
             userToWorkspaces[user.id] = {};
