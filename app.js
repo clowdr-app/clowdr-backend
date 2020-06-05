@@ -101,8 +101,11 @@ var roleCache = {};
 
 async function getOrCreateRole(confID, priv) {
     let name = confID + "-" + priv;
-    if (roleCache[name])
+    console.log("Role query: " + name)
+    if (roleCache[name]){
+        console.log("Cache hit: " + roleCache[name]);
         return roleCache[name];
+    }
     try {
         var roleQ = new Parse.Query(Parse.Role);
         roleQ.equalTo("name", name);
@@ -128,6 +131,7 @@ async function getOrCreateRole(confID, priv) {
         console.log(err);
         return null;
     }
+    console.log("Returning: " + roleCache[name])
     return roleCache[name];
 }
 
