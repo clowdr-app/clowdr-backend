@@ -104,6 +104,7 @@ async function getOrCreateRole(confID, priv) {
     console.log("Role query: " + name)
     if (roleCache[name]){
         console.log("Cache hit: " + roleCache[name]);
+        console.log(roleCache[name]);
         return roleCache[name];
     }
     try {
@@ -132,6 +133,7 @@ async function getOrCreateRole(confID, priv) {
         return null;
     }
     console.log("Returning: " + roleCache[name])
+    console.log(roleCache[name]);
     return roleCache[name];
 }
 
