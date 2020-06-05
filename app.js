@@ -553,10 +553,13 @@ async function getOrCreateParseUser(slackUID, conf, slackClient) {
             await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
             return u;
         }
-        if (!conf.config.AUTO_CREATE_USER) {
-            return null; //TODO send an error back to the user, include the email address and conference name
-        }
+        // if (!conf.config.AUTO_CREATE_USER) {
+        //     console.log("AUTO CREATE IS DISABLED!")
+        //     return null; //TODO send an error back to the user, include the email address and conference name
+        // }
         let user = await createParseUserAndEnsureRole(user_info.user, conf, await getOrCreateRole(conf.id, "conference"));
+        console.log("Create return")
+        console.log(user);
 
         return user;
     } catch (err) {
@@ -569,13 +572,14 @@ async function getOrCreateParseUser(slackUID, conf, slackClient) {
 async function createParseUserAndEnsureRole(slackUser, conf, role) {
     //Fallback. Create a new user in parse to represent this person.
     let user = new Parse.User();
-    console.log("Creating: " + slackUser.profile.email)
     user.set("username", slackUser.profile.email);
     user.set("displayname", slackUser.profile.real_name);
     user.set("password", slackUser.profile.email + Math.random());
     user.set("email", slackUser.profile.email);
+    user.set("slackID", slackUser.id);
     user = await user.signUp({}, {useMasterKey: true});
     await ensureUserHasTeamRole(user, conf, role);
+    return user;
 }
 
 async function generateHome(conf, parseUser, teamID) {
