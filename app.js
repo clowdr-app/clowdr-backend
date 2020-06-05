@@ -478,6 +478,8 @@ async function ensureUserHasTeamRole(user, conf, role) {
         roleQuery.equalTo("id", role.id);
         const roles = await roleQuery.find({useMasterKey: true});
         if (!roles || roles.length == 0) {
+            console.log(role)
+            console.log(role.getUsers)
             role.getUsers().add(user);
             await role.save({}, {useMasterKey: true});
         }
