@@ -100,11 +100,11 @@ async function getParseAdminRole() {
 var roleCache = {};
 
 async function getOrCreateRole(confID, priv) {
+    if(typeof(confID) === 'object'){
+        confID = confID.id;
+    }
     let name = confID + "-" + priv;
-    console.log("Role query: " + name)
     if (roleCache[name]){
-        console.log("Cache hit: " + roleCache[name]);
-        console.log(roleCache[name]);
         return roleCache[name];
     }
     try {
@@ -120,7 +120,9 @@ async function getOrCreateRole(confID, priv) {
             newrole.getRoles().add(adminRole);
             try {
                 newrole = await newrole.save({}, {useMasterKey: true});
+                console.log(newrole);
             } catch (err) {
+                console.log("Did not actually create it:")
                 console.log(err);
             }
             roleCache[name] = newrole;
@@ -208,7 +210,7 @@ async function addNewUsersFromSlack(conf) {
                     } else {
                         //exists, just make sure that the role exists
                         if (!roleUsersByID[parseUser.id]) {
-                            ensureUserHasTeamRole(parseUser, conf, confRole);
+                            await ensureUserHasTeamRole(parseUser, conf, confRole);
                             roleUsersByID[parseUser.id] = 1;
                         }
                         let changed = false;
@@ -272,7 +274,7 @@ async function getConference(teamID, teamDomain) {
     let accessRecord = await accessQ.first({useMasterKey: true});
     if (!accessRecord) {
         accessRecord = new ClowdrInstanceAccess();
-        let role = await getOrCreateRole(r, "conference");
+        let role = await getOrCreateRole(r.id, "conference");
         let acl = new Parse.ACL();
         console.log(role);
         try {
@@ -373,7 +375,7 @@ async function getConference(teamID, teamDomain) {
     let admins = await adminsQ.find({useMasterKey: true});
     let promises = [];
     for(let admin of admins){
-        promises.push(ensureUserHasTeamRole(admin, r, getOrCreateRole(r.id,"conference")));
+        promises.push(ensureUserHasTeamRole(admin, r, await getOrCreateRole(r.id,"conference")));
     }
     await Promise.all(promises);
 
@@ -468,6 +470,9 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
 
 async function ensureUserHasTeamRole(user, conf, role) {
     let confID = conf.id;
+    // console.log("EUHTR")
+    // console.log(user);
+    // console.trace()
     if (userToWorkspaces[user.id] && userToWorkspaces[user.id][conf.id]) {
         return;
     }
@@ -476,10 +481,13 @@ async function ensureUserHasTeamRole(user, conf, role) {
         const roleQuery = new Parse.Query(Parse.Role);
         roleQuery.equalTo("users", user);
         roleQuery.equalTo("id", role.id);
+        if(!role.id){
+            console.log("invalid role?")
+            console.log(role);
+            console.trace();
+        }
         const roles = await roleQuery.find({useMasterKey: true});
         if (!roles || roles.length == 0) {
-            console.log(role)
-            console.log(role.getUsers)
             role.getUsers().add(user);
             await role.save({}, {useMasterKey: true});
         }
@@ -499,7 +507,7 @@ async function getOrCreateParseUser(slackUID, conf, slackClient) {
     q.equalTo("slackID", slackUID);
     let u = await q.first({useMasterKey: true});
     if (u) {
-        await ensureUserHasTeamRole(u, conf, getOrCreateRole(conf, "conference"));
+        await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
         return u;
     }
     //Now try to retrieve by email
@@ -512,13 +520,13 @@ async function getOrCreateParseUser(slackUID, conf, slackClient) {
         if (u) {
             u.set("slackID", slackUID);
             await u.save({}, {useMasterKey: true});
-            await ensureUserHasTeamRole(u, conf, getOrCreateRole(conf, "conference"));
+            await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
             return u;
         }
         if (!conf.config.AUTO_CREATE_USER) {
             return null; //TODO send an error back to the user, include the email address and conference name
         }
-        let user = await createParseUserAndEnsureRole(user_info.user, conf, getOrCreateRole(conf.id, "conference"));
+        let user = await createParseUserAndEnsureRole(user_info.user, conf, await getOrCreateRole(conf.id, "conference"));
 
         return user;
     } catch (err) {
@@ -652,12 +660,10 @@ async function sendJoinLinkToUser(body, roomName, isPrivate) {
         respondWithError(body.response_url, "Room names can not begin with special characters")
         return;
     }
-    console.log("Getting conf")
     let conf = await getConference(body.team_id, body.team_domain)
     let twilio = conf.twilio;
     let slackClient = conf.config.slackClient;
     const uid = body.user_id;
-    console.log("Gettign user")
     const parseUser = await getOrCreateParseUser(body.user_id, conf, slackClient);
 
     let user_info = await slackClient.users.info({user: uid});
@@ -685,7 +691,6 @@ async function sendJoinLinkToUser(body, roomName, isPrivate) {
             roleACL.setPublicReadAccess(true);
             let modRole = await getOrCreateRole(conf.id,"moderator");
 
-            console.log(modRole);
             let acl = new Parse.ACL();
             acl.setPublicReadAccess(false);
             acl.setPublicWriteAccess(false);
