@@ -515,10 +515,10 @@ async function getConfig(conf) {
     if (!config.FRONTEND_URL) {
         config.FRONTEND_URL = "https://staging.clowdr.org"
     }
-    // if (!config.TWILIO_CALLBACK_URL) {
-        // config.TWILIO_CALLBACK_URL = "https://clowdr.herokuapp.com/twilio/event"
-        config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event" //TODO
-    // }
+    if (!config.TWILIO_CALLBACK_URL) {
+        config.TWILIO_CALLBACK_URL = "https://clowdr.herokuapp.com/twilio/event"
+        // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event" //TODO
+    }
     if (!config.TWILIO_ROOM_TYPE) {
         config.TWILIO_ROOM_TYPE = "group";
     }
