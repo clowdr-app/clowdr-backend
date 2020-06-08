@@ -47,8 +47,12 @@ let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
 let ClowdrInstanceAccess = Parse.Object.extend("ClowdrInstanceAccess");
 
 let InstanceConfig = Parse.Object.extend("InstanceConfiguration");
-let Channel = Parse.Object.extend("Channel");
 let BreakoutRoom = Parse.Object.extend("BreakoutRoom");
+let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
+var InstancePermission = Parse.Object.extend("InstancePermission");
+let LiveActivity = Parse.Object.extend("LiveActivity");
+let Channel = Parse.Object.extend("Channel");
+let UserProfile = Parse.Object.extend("UserProfile");
 
 
 function generateRandomString(length) {
@@ -141,6 +145,15 @@ async function getOrCreateRole(confID, priv) {
 
 var emailsToParseUser;
 var allUsersPromise;
+var parseUIDToProfiles;
+
+slackEvents.on('team_join', async (event) => {
+    let conf = await getConference(event.user.team_id, "unknown");
+    const parseUser = await getOrCreateParseUser(event.user.id, conf, conf.config.slackClient);
+
+    console.log("Created parse user: " + parseUser.get("displayname") + " in " + conf.get("conferenceName"));
+});
+
 
 function getAllUsers() {
     if (allUsersPromise)
@@ -148,7 +161,7 @@ function getAllUsers() {
     if (emailsToParseUser) {
         return new Promise((resolve) => resolve(emailsToParseUser));
     }
-    allUsersPromise = new Promise(async (resolve, reject) => {
+    let usersPromise = new Promise(async (resolve, reject) => {
         emailsToParseUser = {};
         try {
             let parseUserQ = new Parse.Query(Parse.User);
@@ -166,7 +179,6 @@ function getAllUsers() {
                 // totalCount = count;
                 let parseUserQ = new Parse.Query(Parse.User);
                 parseUserQ.limit(1000);
-
                 parseUserQ.skip(nRetrieved);
                 let results = await parseUserQ.find({useMasterKey: true});
                 // results = dat.results;
@@ -184,13 +196,55 @@ function getAllUsers() {
             reject(err);
         }
     })
+    let profilesPromise = new Promise(async (resolve, reject) => {
+        parseUIDToProfiles = {};
+        try {
+            let parseUserQ = new Parse.Query(UserProfile);
+            parseUserQ.limit(1000);
+            parseUserQ.withCount();
+            let nRetrieved = 0;
+            let {count, results} = await parseUserQ.find({useMasterKey: true});
+            nRetrieved = results.length;
+            // console.log(count);
+            // console.log(results);
+            results.map((u) => {
+                if(!parseUIDToProfiles[u.get("user").id]){
+                    parseUIDToProfiles[u.get("user").id] ={};
+                }
+                parseUIDToProfiles[u.get("user").id][u.get("conference").id] = u;
+            });
+            while (nRetrieved < count) {
+                // totalCount = count;
+                let parseUserQ = new Parse.Query(UserProfile);
+                parseUserQ.limit(1000);
+                parseUserQ.skip(nRetrieved);
+                let results = await parseUserQ.find({useMasterKey: true});
+                // results = dat.results;
+                nRetrieved += results.length;
+                if (results)
+                    results.map((u) => {
+                        if(!parseUIDToProfiles[u.get("user").id]){
+                            parseUIDToProfiles[u.get("user").id] ={};
+                        }
+                        parseUIDToProfiles[u.get("user").id][u.get("conference").id] = u;
+                    });
+            }
+            allUsersPromise = null;
+            resolve(parseUIDToProfiles);
+        }catch(err){
+            console.log("In get all user profiles ")
+            console.log(err);
+            reject(err);
+        }
+    })
+    allUsersPromise = Promise.all([usersPromise,profilesPromise]);
     return allUsersPromise;
 }
 
 async function addNewUsersFromSlack(conf) {
     try {
         let slackUsers = await conf.config.slackClient.users.list();
-        let userMap = await getAllUsers();
+        await getAllUsers();
 
         let confRole = await getOrCreateRole(conf.id, "conference");
         let existingQ = confRole.getUsers().query();
@@ -210,45 +264,38 @@ async function addNewUsersFromSlack(conf) {
                 let email = user.profile.email;
                 let debug = false;
                 if (email) {
-                    let parseUser = userMap[email];
-                    if (!parseUser) {
-                        promises.push(createParseUserAndEnsureRole(user, conf, confRole).catch((e)=>{
+                    let parseUser = emailsToParseUser[email];
+                    if (!parseUser || !parseUIDToProfiles[parseUser.id] || !parseUIDToProfiles[parseUser.id][conf.id]) {
+                        promises.push(getOrCreateParseUser(user.id, conf, conf.config.slackClient, user).catch((e)=>{
 console.log(e);
                        }));
                     } else {
+                        let acl = parseUser.getACL();
+                        if(acl.getPublicReadAccess())
+                        {
+                            acl.setPublicReadAccess(false);
+                            await parseUser.save({},{useMasterKey: true});
+                        }
                         //exists, just make sure that the role exists
                         if (!roleUsersByID[parseUser.id]) {
                             if(debug){
                                 console.log("adding team role")
                             }
-                            await ensureUserHasTeamRole(parseUser, conf, confRole);
+                            let modRole = await getOrCreateRole(conf.id, "moderator");
+
+                            promises.push(ensureUserHasTeamRole(parseUser, conf, modRole));
                             roleUsersByID[parseUser.id] = 1;
                         }
-                        else if(debug){
-                            console.log("already has role")
+                        let profile = parseUIDToProfiles[parseUser.id][conf.id];
+                        // console.log(parseUIDToProfiles)
+                        if(!profile.get("displayName")){
+                            profile.set("displayName",user.profile.real_name);
+                            promises.push(profile.save({},{useMasterKey: true}));
                         }
-                        let changed = false;
-                        if (!parseUser.get("slackID")) {
-                            parseUser.set("slackID", user.id);
-                            changed = true;
-                        }
-                        if (!parseUser.get("profilePhoto") && user.profile.image_512) {
-                            try {
-                                // let file = new Parse.File("slack-profile-photo.jpg", {
-                                //     uri: user.profile.image_512
-                                // });
-                                // let res = await file.save({useMasterKey: true});
-                                // parseUser.set("profilePhoto", res);
-                                // await parseUser.save({},{useMasterKey: true})
-                                // changed = true;
-                            }catch(err){
-                                console.log(user.profile.image_512);
-                                console.log(err)
-                            }
-                        }
-                        if (changed)
-                            promises.push(parseUser.save({}, {useMasterKey: true}))
                     }
+                    // if(conf.get("conferenceName") == "PLDI 2020" && user.profile.status_emoji==":oc"){
+                    //     promises.push(ensureUserHasTeamRole(parseUser, conf, confRole));
+                    // }
                 }
             }
         } else {
@@ -265,6 +312,8 @@ console.log(e);
 }
 
 async function getConference(teamID, teamDomain) {
+    if(!teamID)
+        return;
     try {
         if (confCache[teamID])
             return confCache[teamID];
@@ -318,6 +367,14 @@ async function getConference(teamID, teamDomain) {
                     parseRoom.set("title", room.uniqueName);
                     parseRoom.set("persistence", "ephemeral");
                     parseRoom = await parseRoom.save();
+                    let acl = new Parse.ACL();
+                    acl.setPublicReadAccess(false);
+                    acl.setPublicWriteAccess(false);
+                    acl.setRoleReadAccess(modRole, true);
+                    acl.setRoleReadAccess(await getOrCreateRole(conf.id, "conference"), true);
+                    parseRoom.setACL(acl, {useMasterKey: true});
+                    await parseRoom.save({}, {useMasterKey: true});
+                    sidToRoom[twilioRoom.sid] = parseRoom;
                     r.rooms.push(parseRoom);
                 }
             }
@@ -325,7 +382,8 @@ async function getConference(teamID, teamDomain) {
 
         for (let parseRoom of r.rooms) {
             try {
-                if (!parseRoom.get("twilioID"))
+                console.log(parseRoom.get("title"))
+                if (!parseRoom.get("twilioID") && parseRoom.get("persistence") != "ephemeral")
                     continue; //persistent room, not occupied.
                 let found = roomsInTwilio.filter((i) => i.status == 'in-progress' && i.sid == parseRoom.get("twilioID"));
                 if (found.length == 1 && found[0].status == 'in-progress') {
@@ -335,7 +393,7 @@ async function getConference(teamID, teamDomain) {
                     for (let participant of participants) {
                         let ident = participant.identity;
                         let uid = ident.substring(0, ident.indexOf(":"));
-                        let userFindQ = new Parse.Query(User);
+                        let userFindQ = new Parse.Query(UserProfile);
                         try {
                             let user = await userFindQ.get(uid, {useMasterKey: true});
                             if (!parseRoom.get("members")) {
@@ -369,12 +427,9 @@ async function getConference(teamID, teamDomain) {
                     //room no logner exists
                     if (parseRoom.get("persistence") == "persistent") {
                         parseRoom.set("twilioID", null);
-                        parseRoom.save({}, {userMasterKey: true});
+                        await parseRoom.save({}, {userMasterKey: true});
                     } else {
-                        if (parseRoom.get("requiredRole")) {
-                            parseRoom.get("requiredRole").destroy({useMasterKey: true});
-                        }
-                        parseRoom.destroy({useMasterKey: true});
+                        await parseRoom.destroy({useMasterKey: true});
                         r.rooms = r.rooms.filter((r) => r.id != parseRoom.id);
                     }
                 }
@@ -384,7 +439,7 @@ async function getConference(teamID, teamDomain) {
             }
         }
 
-        if (!process.env.SKIP_INIT)
+        // if (!process.env.SKIP_INIT)
             await addNewUsersFromSlack(r);
 
         let adminRole = await getParseAdminRole();
@@ -399,6 +454,15 @@ async function getConference(teamID, teamDomain) {
             console.log(err);
         });
 
+        let allChannels = await r.config.slackClient.conversations.list({types: "private_channel,public_channel"});
+        for(let channel of allChannels.channels){
+            if(channel.name=="moderators"){
+                r.moderatorChannel = channel.id;
+            }
+            else if(channel.name =="technical-support"){
+                r.techSupportChannel = channel.id;
+            }
+        }
         confCache[teamID] = r;
         return r;
     }catch(err){
@@ -407,7 +471,39 @@ async function getConference(teamID, teamDomain) {
         return null;
     }
 }
+var userNotifications = {};
 
+async function pushToUserStream(parseUser, parseConference, topic) {
+    let activtyData;
+    if (!userNotifications[parseUser.id] || !userNotifications[parseUser.id][parseConference.id] ||
+        (topic && !userNotifications[parseUser.id][parseConference.id][topic])) {
+
+        let liveActivityQ = new Parse.Query("LiveActivity");
+        liveActivityQ.equalTo("user",parseUser);
+        liveActivityQ.equalTo("conference", parseConference);
+        liveActivityQ.equalTo("topic", topic);
+        activtyData= await liveActivityQ.first({useMasterKey: true});
+        if(!activtyData){
+            activtyData = new LiveActivity();
+            activtyData.set("user", parseUser);
+            activtyData.set("conference", parseConference);
+            activtyData.set("topic", topic);
+            let acl = new Parse.ACL();
+            acl.setPublicReadAccess(false);
+            acl.setReadAccess(parseUser, true);
+            activtyData.setACL(acl);
+        }
+        if(!userNotifications[parseUser.id])
+            userNotifications[parseUser.id] ={};
+        if(!userNotifications[parseUser.id][parseConference.id])
+            userNotifications[parseUser.id][parseConference.id] = {};
+        userNotifications[parseUser.id][parseConference.id][topic] = activtyData;
+    } else {
+        activtyData = userNotifications[parseUser.id][parseConference.id][topic];
+    }
+    await activtyData.save({}, {useMasterKey: true});
+
+}
 async function getConfig(conf) {
     let q = new Parse.Query(InstanceConfig)
     q.equalTo("instance", conf);
@@ -419,10 +515,10 @@ async function getConfig(conf) {
     if (!config.FRONTEND_URL) {
         config.FRONTEND_URL = "https://staging.clowdr.org"
     }
-    if (!config.TWILIO_CALLBACK_URL) {
-        config.TWILIO_CALLBACK_URL = "https://clowdr.herokuapp.com/twilio/event"
-        // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event" //TODO
-    }
+    // if (!config.TWILIO_CALLBACK_URL) {
+        // config.TWILIO_CALLBACK_URL = "https://clowdr.herokuapp.com/twilio/event"
+        config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event" //TODO
+    // }
     if (!config.TWILIO_ROOM_TYPE) {
         config.TWILIO_ROOM_TYPE = "group";
     }
@@ -431,12 +527,61 @@ async function getConfig(conf) {
     }
     // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event";
     config.slackClient = new WebClient(config.SLACK_BOT_TOKEN);
+
     // console.log(JSON.stringify(config,null,2))
     return config;
 }
 
+var userIDToSession = {};
+var roomCache = {};
 async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) {
-    if (conf.rooms.length == 0) {
+
+    let sessionToken = userIDToSession[parseUser.id];
+    if(!sessionToken){
+        let userQ = new Parse.Query(Parse.Session);
+        userQ.equalTo("user", parseUser);
+        let parseSession = await userQ.first({useMasterKey: true});
+        sessionToken = parseSession.getSessionToken();
+        userIDToSession[parseUser.id] = sessionToken;
+    }
+    let rooms = roomCache[parseUser.id];
+    if(!rooms){
+        const accesToConf = new Parse.Query(InstancePermission);
+        accesToConf.equalTo("conference", conf);
+        accesToConf.equalTo("action", privilegeRoles['access-from-slack']);
+        const hasAccess = await accesToConf.first({sessionToken: sessionToken});
+        if(!hasAccess){
+            blocks.push({
+                type: "section",
+                text: {
+                    type: "mrkdwn",
+                    text: "Sorry, this feature is not yet enabled."
+                }
+            })
+            roomCache[parseUser.id] = "no-access";
+            return;
+        }
+
+        let query = new Parse.Query(BreakoutRoom);
+        query.include("members");
+        query.equalTo("conference", conf);
+        query.limit(100);
+        rooms = await query.find({sessionToken: sessionToken});
+        roomCache[parseUser.id] = rooms;
+    }
+    else if(rooms == "no-access"){
+        blocks.push({
+            type: "section",
+            text: {
+                type: "mrkdwn",
+                text: "Sorry, this feature is not yet enabled."
+            }
+        })
+        roomCache[parseUser.id] = "no-access";
+        return;
+    }
+
+    if (rooms.length == 0) {
         blocks.push({
             type: "section",
             text: {
@@ -450,11 +595,11 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
         type: "section",
         text: {
             type: "mrkdwn",
-            text: conf.rooms.length + " video room" + (conf.rooms.length > 1 ? 's are' : 'is') + " up right now. " +
+            text: rooms.length + " video room" + (rooms.length > 1 ? 's are' : ' is') + " up right now (this list includes all public rooms and all private rooms to which you have access). " +
                 "Join one of these, or create a new room by sending a new message `/video [name of room to join or create]`"
         }
     })
-    for (let room of conf.rooms) {
+    for (let room of rooms) {
         let membersString = "";
         if (room.get("members")) {
             for (let member of room.get("members")) {
@@ -531,14 +676,62 @@ async function ensureUserHasTeamRole(user, conf, role) {
     }
 }
 
-async function getOrCreateParseUser(slackUID, conf, slackClient) {
+var privilegeRoles = {
+    "createVideoRoom": null,
+    "chat": null,
+    "access-from-slack": null,
+    "createVideoRoom-persistent": null,
+    "createVideoRoom-group": null,
+    "createVideoRoom-smallgroup": null,
+    "createVideoRoom-peer-to-peer": null,
+    'createVideoRoom-private': null
+};
+
+async function createPrivileges() {
+    return Promise.all(Object.keys(privilegeRoles).map(async (action) => {
+            let actionsQ = new Parse.Query(PrivilegedAction);
+            actionsQ.equalTo("action", action)
+            actionsQ.include("role");
+            let res = await actionsQ.first({useMasterKey: true});
+            if (!res) {
+                let pa = new PrivilegedAction();
+                pa.set("action", action);
+                res = await pa.save({}, {useMasterKey: true});
+            }
+            privilegeRoles[action] = res;
+        }
+    ));
+}
+
+async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
     //First try retrieving by slack ID
-    let q = new Parse.Query(Parse.User);
+    let q = new Parse.Query(UserProfile);
     q.equalTo("slackID", slackUID);
-    let u = await q.first({useMasterKey: true});
-    if (u) {
-        await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
-        return u;
+    q.equalTo("conference", conf);
+
+    let profile = await q.first({useMasterKey: true});
+    if (profile) {
+        await ensureUserHasTeamRole(profile.get("user"), conf, await getOrCreateRole(conf, "conference"));
+        // if (!profile.get("profilePhoto")) {
+        //     if(!slackProfile){
+        //         slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
+        //     }
+        //     if(slackProfile.profile.image_512) {
+        //         try {
+        //             let url = slackProfile.profile.image_512;
+        //             let extension = slackProfile.profile.image_512.substring(slackProfile.profile.image_512.length-3);
+        //             let file = new Parse.File("slack-profile-photo"+slackUID+"."+extension, {
+        //                 uri: url
+        //             });
+        //             let res = await file.save({useMasterKey: true});
+        //             profile.set("profilePhoto", res);
+        //             await profile.save({},{useMasterKey: true})
+        //         } catch (err) {
+        //             console.log(err)
+        //         }
+        //     }
+        // }
+        return profile.get("user");
     }
     //Now try to retrieve by email
 
@@ -546,11 +739,42 @@ async function getOrCreateParseUser(slackUID, conf, slackClient) {
         let user_info = await slackClient.users.info({user: slackUID});
         q = new Parse.Query(Parse.User);
         q.equalTo("email", user_info.user.profile.email);
-        u = await q.first();
+        let u = await q.first({useMasterKey: true});
         if (u) {
-            u.set("slackID", slackUID);
-            await u.save({}, {useMasterKey: true});
+            //Just create the profile
+            console.log("Creating profile " + slackUID);
+            let profile = new UserProfile();
+            profile.set("user", u);
+            profile.set("conference", conf);
+            profile.set("slackID", slackUID);
+            profile.set("displayName", slackProfile.profile.real_name);
+            let profileACL = new Parse.ACL();
+            profileACL.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
+            profileACL.setWriteAccess(u, true);
+            profile.setACL(profileACL);
+            if(!slackProfile){
+                slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
+            }
+            // if(slackProfile.profile && slackProfile.profile.image_512) {
+            //     try {
+            //         let url = slackProfile.profile.image_512;
+            //         let extension = slackProfile.profile.image_512.substring(slackProfile.profile.image_512.length-3);
+            //         let fileName = "slack-profile-photo-"+slackUID+"."+extension;
+            //         let file = new Parse.File(fileName, {
+            //             uri: url
+            //         });
+            //         let res = await file.save({useMasterKey: true});
+            //         profile.set("profilePhoto", res);
+            //         profile.save({},{useMasterKey: true})
+            //     } catch (err) {
+            //         profile.set("profilePhoto", undefined)
+            //         // console.log(err)
+            //     }
+            // }
+            await profile.save({}, {useMasterKey: true});
             await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
+            u.get("profiles").add(profile);
+            await u.save({}, {useMasterKey: true});
             return u;
         }
         // if (!conf.config.AUTO_CREATE_USER) {
@@ -558,9 +782,42 @@ async function getOrCreateParseUser(slackUID, conf, slackClient) {
         //     return null; //TODO send an error back to the user, include the email address and conference name
         // }
         let user = await createParseUserAndEnsureRole(user_info.user, conf, await getOrCreateRole(conf.id, "conference"));
-        console.log("Create return")
-        console.log(user);
+        let profile = new UserProfile();
+        profile.set("user", user);
+        profile.set("conference", conf);
+        profile.set("slackID", slackUID);
+        let profileACL = new Parse.ACL();
+        profileACL.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
+        profileACL.setWriteAccess(user, true);
+        profile.setACL(profileACL);
+        // if(!slackProfile){
+        //     slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
+        // }
+        // if(slackProfile.profile.image_512) {
+        //     try {
+        //         let url = slackProfile.profile.image_512;
+        //         let extension = slackProfile.profile.image_512.substring(slackProfile.profile.image_512.length-3);
+        //         let file = new Parse.File("slack-profile-photo"+slackUID+"."+extension, {
+        //             uri: url
+        //         });
+        //         let res = await file.save({useMasterKey: true});
+        //         profile.set("profilePhoto", res);
+        //         profile.save({},{useMasterKey: true})
+        //     } catch (err) {
+        //         profile.set("profilePhoto", undefined);
+        //         console.log("Bailed on saving profile.")
+        //         // console.log(err)
+        //     }
+        // }
+        profile = await profile.save({}, {useMasterKey: true});
+        let relation = user.relation("profiles");
+        relation.add(profile);
 
+        let userACL = new Parse.ACL();
+        userACL.setWriteAccess(user, true);
+        userACL.setReadAccess(user, true);
+        user.setACL(userACL);
+        await user.save({}, {useMasterKey: true});
         return user;
     } catch (err) {
         console.log("Unable to create user "+ slackUID)
@@ -576,9 +833,14 @@ async function createParseUserAndEnsureRole(slackUser, conf, role) {
     user.set("displayname", slackUser.profile.real_name);
     user.set("password", slackUser.profile.email + Math.random());
     user.set("email", slackUser.profile.email);
-    user.set("slackID", slackUser.id);
     user = await user.signUp({}, {useMasterKey: true});
     await ensureUserHasTeamRole(user, conf, role);
+    let userACL = new Parse.ACL();
+    userACL.setWriteAccess(user, true);
+    userACL.setReadAccess(user, true);
+    userACL.setPublicReadAccess(false);
+    user.setACL(userACL);
+    await user.save({},{useMasterKey: true})
     return user;
 }
 
@@ -650,7 +912,8 @@ function respondWithError(response_url, error) {
     ).catch(console.error);
 }
 
-function sendMessageWithLinkToUser(response_url, messageText, linkText, link) {
+function sendMessageWithLinkToUser(response_url, messageText,conf, linkText, link) {
+    let techSupportRoom = conf.techSupportChannel;
     const message = {
         "text": messageText, //+". <"+link+"|"+linkText+">",
         "response_type": "ephemeral",
@@ -660,31 +923,61 @@ function sendMessageWithLinkToUser(response_url, messageText, linkText, link) {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": messageText//+". <"+link+"|"+linkText+">",
+                    "text": messageText + (link ? " <" + link + "|" + linkText + ">" : ""),
                 }
             },
-            {
-                "type": "actions",
-                "block_id": "actions1",
-                "elements": [
-
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": linkText
-                        },
-                        "action_id": "join_call_clicked",
-                        "value": "click_me_123",
-                        "url": link
-                    }]
-            }
-        ]
+        ],
+        "attachments": [{
+            "text": (link?"Please make sure to open this link in Chrome or Safari (sorry, the mobile-embedded browser won't work, and Firefox will not work very well). " : "")+ (techSupportRoom ? "Having trouble with technical issues? Come join <#"+techSupportRoom+">.":"")
+        }]
     };
+    if(link){
+        // message.blocks.push(  {
+        //     "type": "actions",
+        //     "block_id": "actions1",
+        //     "elements": [
+        //
+        //         {
+        //             "type": "button",
+        //             "text": {
+        //                 "type": "plain_text",
+        //                 "text": linkText
+        //             },
+        //             "action_id": "join_call_clicked",
+        //             "value": "click_me_123",
+        //             "url": link
+        //         }]
+        // });
+    }
 
     return axios.post(response_url, message);
 }
 
+async function sendModeratorMessageFromSlack(conf, slackUID, message){
+    let slack = conf.config.slackClient;
+    let channel = await getModeratorChannel(conf);
+    await conf.config.slackClient.chat.postMessage({channel: channel,
+        text: "Moderation request from slack",
+        blocks:[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "A moderation request was received from <@"+slackUID+"> in slack:"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ">"+message
+                }
+            }
+        ]
+    })
+
+
+}
 async function sendJoinLinkToUser(body, roomName, isPrivate) {
     if (!roomName) {
         respondWithError(body.response_url, "You need to specify a room name");
@@ -695,77 +988,36 @@ async function sendJoinLinkToUser(body, roomName, isPrivate) {
         return;
     }
     let conf = await getConference(body.team_id, body.team_domain)
-    let twilio = conf.twilio;
     let slackClient = conf.config.slackClient;
-    const uid = body.user_id;
     const parseUser = await getOrCreateParseUser(body.user_id, conf, slackClient);
 
-    let user_info = await slackClient.users.info({user: uid});
-    let real_name = user_info.user.real_name;
-
-    // Find the corresponding twilio channel
-    var twilioRoom;
-    try {
-        twilioRoom = await twilio.video.rooms.create({
-            // type: "peer-to-peer", //TESTING
-            type: conf.config.TWILIO_ROOM_TYPE,
-            uniqueName: roomName,
-            statusCallback: conf.config.TWILIO_CALLBACK_URL
-        });
-        //Create a new room in the DB
-        let parseRoom = new BreakoutRoom();
-        parseRoom.set("title", roomName);
-        parseRoom.set("conference", conf);
-        parseRoom.set("twilioID", twilioRoom.sid);
-        parseRoom.set("visibility",(isPrivate?"unlisted":"listed"));
-        parseRoom.set("persistence","ephemeral");
-        console.log("Making room")
-        if(isPrivate){
-            let roleACL = new Parse.ACL();
-            roleACL.setPublicReadAccess(true);
-            let modRole = await getOrCreateRole(conf.id,"moderator");
-
-            let acl = new Parse.ACL();
-            acl.setPublicReadAccess(false);
-            acl.setPublicWriteAccess(false);
-            acl.setRoleReadAccess(modRole, true);
-            acl.setReadAccess(parseUser.id, true);
-            parseRoom.setACL(acl, {useMasterKey: true});
-        }
-        await parseRoom.save({},{useMasterKey: true});
-        sidToRoom[twilioRoom.sid] = parseRoom;
-        conf.rooms.push(parseRoom);
-
-    } catch (err) {
-        //if it's a private room and we are not the one making it, we should make sure we have access
-        if(isPrivate){
-
-            let query = new Parse.Query(Parse.Session);
-            // console.log(token);
-            query.equalTo("user", parseUser);
-            query.greaterThan("expiresAt", new Date());
-            let session = await query.first({useMasterKey: true});
-            let roomQ = new Parse.Query(BreakoutRoom);
-            roomQ.equalTo("title", roomName);
-            roomQ.equalTo("conference", conf);
-            let room = roomQ.first({sessionToken: session.getSessionToken()})
-            if(!room){
-                respondWithError(body.response_url, "Invalid private room.")
-                return;
-            }
-        }
-        twilioRoom = await twilio.video.rooms(roomName).fetch();
+    //Make sure that the user has access...
+    let sessionToken = userIDToSession[parseUser.id];
+    if(!sessionToken){
+        let userQ = new Parse.Query(Parse.Session);
+        userQ.equalTo("user", parseUser);
+        let parseSession = await userQ.first({useMasterKey: true});
+        sessionToken = parseSession.getSessionToken();
+        userIDToSession[parseUser.id] = sessionToken;
     }
 
-    let roomID = sidToRoom[twilioRoom.sid].id;
-    const link = await buildLink(roomID, roomName, parseUser, conf, body.team_id);
-    await sendMessageWithLinkToUser(body.response_url, "Join the live video call '" + twilioRoom.uniqueName + "' here! :tv:", "Join Call", link);
+    const accesToConf = new Parse.Query(InstancePermission);
+    accesToConf.equalTo("conference", conf);
+    accesToConf.equalTo("action", privilegeRoles['access-from-slack']);
+    const hasAccess = await accesToConf.first({sessionToken: sessionToken});
+    if(!hasAccess){
+        respondWithError(body.response_url,"You do not currently have access to video rooms at " + conf.get("conferenceName"));
+        return;
+    }
+
+    const link = await buildLink(null, roomName, parseUser, conf, body.team_id);
+    await sendMessageWithLinkToUser(body.response_url, "Finish creating or joining the live video call '" + roomName + "' here! :tv: Remember to keep Slack open too to keep the conversation going here!", conf, "Join Call", link);
 
 }
 
 slackInteractions.action({action_id: "join_video"}, async (payload, respond) => {
 
-    respond({});
+    await respond({});
 
     return {}
 });
@@ -820,6 +1072,7 @@ slackEvents.on("app_home_opened", async (payload) => {
 
 async function slackSlashCommand(req, res, next) {
     let teamID = req.body.team_id;
+    res.status(200).end();
     let conf = await getConference(req.body.team_id, req.body.team_domain)
     //
     // if(req.body.command == "/login"){
@@ -827,6 +1080,21 @@ async function slackSlashCommand(req, res, next) {
     //     console.log(req.body);
     //     await sendLoginLinkToUser(conf, req.body);
     // }
+    if(req.body.command === "/saysomething" || req.body.command == "/moderator"){
+        try {
+            await sendModeratorMessageFromSlack(conf, req.body.user_id, req.body.text)
+            sendMessageWithLinkToUser(req.body.response_url,"Your message has been received by the moderators. They will contact you ASAP to follow up. " +
+                " Please note that since moderators are volunteers, we are unable to provide 24/7 moderation service," +
+                " but will do our best to address every complaint as quickly as possible, and will be sure to follow up" +
+                " to every report.", conf)
+        }catch(err){
+            console.log(err);
+            sendMessageWithLinkToUser(req.body.response_url, "An internal error occurred while sending your message. Please try again or email the organizers. ", conf);
+
+        }
+
+        return;
+    }
     if(req.body.command === "/videodebug"){
         req.body.command = "/video";
         req.body.user_id = "U014VSQ8HDK";
@@ -869,8 +1137,10 @@ async function processTwilioEvent(req, res) {
         let room = sidToRoom[roomSID];
         if (req.body.StatusCallbackEvent == 'participant-connected') {
             let uid = req.body.ParticipantIdentity.substring(0, req.body.ParticipantIdentity.indexOf(":"));
-            let userFindQ = new Parse.Query(User);
+            let userFindQ = new Parse.Query(UserProfile);
+            console.log("LF .. " + uid);
             let user = await userFindQ.get(uid, {useMasterKey: true});
+            console.log("Found user .. " + uid);
             if (!room.get("members")) {
                 room.set("members", [user]);
             } else {
@@ -901,10 +1171,7 @@ async function processTwilioEvent(req, res) {
                     room.set("twilioID", null);
                     await room.save({}, {useMasterKey: true});
                 } else {
-                    //delete the role too
-                    if (room.get("requiredRole")) {
-                        room.get("requiredRole").destroy({useMasterKey: true});
-                    }
+                    //delete the live activity
                     await room.destroy({useMasterKey: true});
                 }
             } else {
@@ -1014,6 +1281,7 @@ app.post("/video/new", bodyParser.json(), bodyParser.urlencoded({extended: false
   return await createNewRoom(req, res);
 });
 async function createNewRoom(req, res){
+    roomCache = {};
     //Validate parse user can create this room
     let token = req.body.identity;
     // let conf = req.body.conf;
@@ -1041,18 +1309,23 @@ async function createNewRoom(req, res){
         if (session) {
             let parseUser = session.get("user");
             //Validate has privileges for conference
-            const accesToConf = new Parse.Query(ClowdrInstanceAccess);
-            accesToConf.equalTo("instance", conf);
-            const hasAccess = await accesToConf.find({sessionToken: token});
-            if (hasAccess) {
+            const accesToConf = new Parse.Query(InstancePermission);
+            accesToConf.equalTo("conference", conf);
+            accesToConf.equalTo("action", privilegeRoles['createVideoRoom']);
+            //TODO access-check for each option, too, but I don't have time now...
+            const hasAccess = await accesToConf.first({sessionToken: token});
+            if (hasAccess && hasAccess.id) {
                 //Try to create the room
                 try {
-                    console.log("Created room: " + conf.config.TWILIO_CALLBACK_URL)
+                    console.log("creating room with callback" + conf.config.TWILIO_CALLBACK_URL)
                     console.log("For " + parseUser.id + ": " + parseUser.get("displayname"))
+                    console.log(roomName)
+                    let maxParticipants = (mode == "peer-to-peer" ? 10 : (mode == "small-group" ? 4 : 24));
                     let twilioRoom = await twilio.video.rooms.create({
                         type: mode,
                         // type: conf.config.TWILIO_ROOM_TYPE,
                         uniqueName: roomName,
+                        maxParticipants: maxParticipants,
                         statusCallback: conf.config.TWILIO_CALLBACK_URL
                     });
                     //Create a new room in the DB
@@ -1060,22 +1333,24 @@ async function createNewRoom(req, res){
                     parseRoom.set("title", roomName);
                     parseRoom.set("conference", conf);
                     parseRoom.set("twilioID", twilioRoom.sid);
-                    parseRoom.set("visibility", visibility);
+                    parseRoom.set("isPrivate", visibility=="unlisted");
                     parseRoom.set("persistence", persistence);
                     parseRoom.set("mode", mode);
-                    if (visibility == "unlisted") {
-                        let roleACL = new Parse.ACL();
-                        roleACL.setPublicReadAccess(true);
-                        let modRole = await getOrCreateRole(conf.id,"moderator");
+                    parseRoom.set("capacity", maxParticipants);
+                    let modRole = await getOrCreateRole(conf.id,"moderator");
 
-                        let acl = new Parse.ACL();
-                        acl.setPublicReadAccess(false);
-                        acl.setPublicWriteAccess(false);
-                        acl.setRoleReadAccess(modRole, true);
+                    let acl = new Parse.ACL();
+                    acl.setPublicReadAccess(false);
+                    acl.setPublicWriteAccess(false);
+                    acl.setRoleReadAccess(modRole, true);
+                    if (visibility == "unlisted") {
                         acl.setReadAccess(parseUser.id, true);
-                        parseRoom.setACL(acl, {useMasterKey: true});
                     }
-                    await parseRoom.save({},{useMasterKey: true});
+                    else{
+                        acl.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
+                    }
+                    parseRoom.setACL(acl, {useMasterKey: true});
+                    await parseRoom.save({}, {useMasterKey: true});
                     sidToRoom[twilioRoom.sid] = parseRoom;
                     conf.rooms.push(parseRoom);
                     return res.send({status: "OK"});
@@ -1083,13 +1358,13 @@ async function createNewRoom(req, res){
                     console.log(err);
                     return res.send({
                         status: "error",
-                        message: "There is already a video room with this name. Please either join the existing room or pick a new name."
+                        message: "There is already a video room with this name (although it may be private, and you can't see it). Please either join the existing room or pick a new name."
                     });
                 }
             } else {
                 return res.send({
                     status: "error",
-                    message: "Could not find enrollment for this user on this conference, " + conf
+                    message: "Sorry, you do not currently have access to create video rooms for " + conf.get("conferenceName")
                 });
             }
 
@@ -1114,6 +1389,7 @@ async function removeFromCall(twilio, roomSID, parseUser) {
 }
 async function updateACL(req,res){
     try {
+        roomCache = {};
         let identity = req.body.identity;
         const roomID = req.body.roomID;
         const conference = req.body.slackTeam;
@@ -1133,26 +1409,109 @@ async function updateACL(req,res){
         let usersWithAccessCurrently = Object.keys(room.getACL().permissionsById).filter(v=>!v.startsWith("role"));
 
         let uq = new Parse.Query(Parse.User);
+        let usersToRefresh = [];
+        let promises = [];
         for (let uid of usersWithAccessCurrently) {
             if (!users.includes(uid)) {
                 room.getACL().setReadAccess(uid, false);
                 let user = await uq.get(uid,{useMasterKey: true});
-                await removeFromCall(conf.twilio, room.get("twilioID"), user);
+                promises.push(removeFromCall(conf.twilio, room.get("twilioID"), user));
+                usersToRefresh.push(user);
             }
         }
         for (let user of users) {
             if (!usersWithAccessCurrently.includes(user)) {
                 room.getACL().setReadAccess(user,true);
+                let fauxUser = new Parse.User();
+                fauxUser.id = user;
+                usersToRefresh.push(fauxUser);
             }
         }
+
         await room.save({}, {useMasterKey: true});
+        for(let user of usersToRefresh){
+            promises.push(pushToUserStream(user, conf, "privateBreakoutRooms"));
+        }
+        await Promise.all(promises);
         res.send({status: "OK"});
     } catch (err) {
         console.log(err);
         res.send({status: "error", message: "Internal server error"});
     }
 }
+async function getModeratorChannel(conf){
+    return conf.moderatorChannel;
+}
+async function sendModeratorMessage(req,res){
+    let identity = req.body.identity;
+    const roomID = req.body.roomID;
+    const conference = req.body.slackTeam;
+    const participants = req.body.participants;
+    let conf = await getConference(conference);
+    let userQ = new Parse.Query(Parse.Session);
+    userQ.equalTo("sessionToken", identity);
+    let parseSession = await userQ.first({useMasterKey: true});
+    let parseUser = parseSession.get("user");
+    let profileQ = new Parse.Query(UserProfile);
+    profileQ.equalTo("user", parseUser);
+    profileQ.equalTo("conference", conf);
+    let profile = await profileQ.first({useMasterKey: true});
+    //Check for roles...
+    let roomQ = new Parse.Query("BreakoutRoom");
+    let room = await roomQ.get(roomID, {sessionToken: identity});
+    if (!room) {
+        return res.send({status: 'error', message: "No such room"});
+    }
+    let unfilledUsers = [];
+    for(let id of participants){
+        unfilledUsers.push(UserProfile.createWithoutData(id));
+    }
+    let users = await Parse.Object.fetchAll(unfilledUsers, {useMasterKey: true});
+    let usersString = "";
+    for(let user of users){
+        usersString += "<@"+user.get("slackID")+">, ";
+    }
+    if(usersString.length > 0){
+        usersString = usersString.substring(0,usersString.length - 2);
+    }
+    //Compose and send a message on slack.
+    let slack = conf.config.slackClient;
+    let channel = await getModeratorChannel(conf);
+    await conf.config.slackClient.chat.postMessage({channel: channel,
+        text: "Moderation request from web",
+        blocks:[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "A moderation request was received from <@"+profile.get("slackID")+"> " +
+                        " while in the web chat room titled: '"+room.get("title")+"', which contained at the time " +
+                        "the following users: " + usersString + ". Message follows:"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ">"+req.body.message.replace("\n","\n>")
+                }
+            }
+        ]
+    })
 
+
+
+    res.send({status: "OK"});
+}
+app.post("/moderator/fromVideo", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
+    try {
+        await sendModeratorMessage(req, res);
+    }catch(err){
+        res.status(500);
+        res.send({status: "error", message: "An internal server error occurred."})
+        console.log(err);
+    }
+})
 app.post("/video/acl", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     await updateACL(req, res);
 })
@@ -1188,7 +1547,11 @@ async function mintTokenForFrontend(req, res) {
     // console.log(identity)
     let parseSession = await userQ.first({useMasterKey: true});
     let parseUser = parseSession.get("user");
-    identity = parseUser.id + ":" + parseUser.get("displayname");
+    let userProfileQ = new Parse.Query(UserProfile);
+    userProfileQ.equalTo("user", parseUser);
+    userProfileQ.equalTo("conference", conf);
+    let userProfile = await userProfileQ.first({useMasterKey: true});
+    identity = userProfile.id + ":" + parseUser.get("displayname");
     console.log(identity);
     // console.log(parseSession);
     // console.log(parseSession.get("user"))
@@ -1251,12 +1614,14 @@ app.post("/slack/login", bodyParser.json(), bodyParser.urlencoded({extended: fal
         if (user.get('loginKey') == secret) {
             let fakeSession = Parse.Object.extend("_Session");
             let newSession = new fakeSession();
+            // console.log(user)
             newSession.set("user", user);
             newSession.set("createdWith", {action: "login", "authProvider": "clowdr"});
             newSession.set("restricted", false);
             newSession.set("expiresAt", moment().add("8", "hours").toDate());
             newSession.set("sessionToken", "r:" + await generateRandomString(24))
             newSession = await newSession.save({}, {useMasterKey: true});
+            // console.log("Created new token: " + newSession.getSessionToken() + " for " + uid)
             return res.send({
                 token: newSession.getSessionToken(),
                 team: payload.team, roomName: payload.roomName
@@ -1272,45 +1637,52 @@ app.post("/slack/login", bodyParser.json(), bodyParser.urlencoded({extended: fal
 })
 
 
-app.get("/video/token", async (req, res) => {
-    let payload = jwt.verify(req.query.token, process.env.CLOWDR_JWT_KEY);
-    console.log("Vidoe token from slack")
-    let conf = await getConference(payload.team);
-    try {
-        let token = videoToken(payload.identity, payload.roomSID, conf.config).toJwt();
-        //respond with the actual token
-        res.send(token);
-    } catch (err) {
-        console.log(err);
-        res.status(500);
-        res.send();
-    }
-});
-//At boot, we should still clear out our cache locally
-let promises = [];
-if(!process.env.SKIP_INIT) {
-    let query = new Parse.Query(ClowdrInstance);
-    query.find({useMasterKey: true}).then((instances) => {
-        instances.forEach(
-            async (inst) => {
-                try {
-                    if (inst.get("slackWorkspace"))
-                        promises.push(getConference(inst.get("slackWorkspace")).catch(err => {
-                            console.log("Unable to load data for  " + inst.get("conferenceName"))
-                            console.log(err);
-                        }));
-                } catch (err) {
-                    console.log(err);
-                }
-            }
-        )
-    }).catch((err) => {
-        console.log(err);
-    });
+//for testing...
+// app.get("/video/token", async (req, res) => {
+//     let payload = jwt.verify(req.query.token, process.env.CLOWDR_JWT_KEY);
+//     console.log("Vidoe token from slack")
+//     let conf = await getConference(payload.team);
+//     try {
+//         let token = videoToken(payload.identity, payload.roomSID, conf.config).toJwt();
+//         //respond with the actual token
+//         res.send(token);
+//     } catch (err) {
+//         console.log(err);
+//         res.status(500);
+//         res.send();
+//     }
+// });
 
+//At boot, we should still clear out our cache locally
+async function runBackend(){
+    let promises = [];
+    await createPrivileges();
+    if(!process.env.SKIP_INIT) {
+        let query = new Parse.Query(ClowdrInstance);
+        query.find({useMasterKey: true}).then((instances) => {
+            instances.forEach(
+                async (inst) => {
+                    try {
+                        if (inst.get("slackWorkspace"))
+                            promises.push(getConference(inst.get("slackWorkspace")).catch(err => {
+                                console.log("Unable to load data for  " + inst.get("conferenceName"))
+                                console.log(err);
+                            }));
+                    } catch (err) {
+                        console.log(err);
+                    }
+                }
+            )
+        }).catch((err) => {
+            console.log(err);
+        });
+
+    }
+
+    Promise.all(promises).then(() => {
+        app.listen(process.env.PORT || 3001, () =>
+            console.log('Express server is running on localhost:3001')
+        );
+    });
 }
-Promise.all(promises).then(() => {
-    app.listen(process.env.PORT || 3001, () =>
-        console.log('Express server is running on localhost:3001')
-    );
-});
+runBackend();
