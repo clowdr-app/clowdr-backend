@@ -1663,13 +1663,12 @@ async function createTwilioRoomForParseRoom(parseRoom, conf){
     return twilioRoom;
 }
 async function mintTokenForFrontend(req, res) {
-    console.log("TOken requested")
     let identity = req.body.identity;
+    console.log("TOken requested by " + identity)
     const room = req.body.room;
     const conference = req.body.conf;
     let conf = await getConference(conference);
     let userQ = new Parse.Query(Parse.Session);
-    console.log(identity);
     userQ.equalTo("sessionToken", identity);
     userQ.include(["user.displayname"]);
     // console.log(identity)
@@ -1763,6 +1762,7 @@ app.post("/slack/login", bodyParser.json(), bodyParser.urlencoded({extended: fal
 app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
     const identity = req.body.identity;
     try {
+        console.log("Chat token for " + identity)
         let sessionObj = await getSession(identity);
         let conf = await getConference(req.body.conference);
 
