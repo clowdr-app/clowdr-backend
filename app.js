@@ -1801,7 +1801,7 @@ async function runBackend(){
             instances.forEach(
                 async (inst) => {
                     try {
-                        if (inst.get("slackWorkspace")){ //&& inst.id =='pvckfSmmTp')
+                        if (inst.get("slackWorkspace")) //&& inst.id =='pvckfSmmTp')
                             promises.push(getConference(inst.get("slackWorkspace")).then((conf)=>{
                                 console.log("Finished "+ conf.get("conferenceName"))
                             }).catch(err => {
