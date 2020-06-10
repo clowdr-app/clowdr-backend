@@ -105,16 +105,17 @@ async function getParseAdminRole() {
 var roleCache = {};
 
 async function getOrCreateRole(confID, priv) {
-    if(typeof(confID) === 'object'){
-        confID = confID.id;
-    }
+    // if(typeof(confID) === 'object'){
+    //     confID = confID.id;
+    // }
     let name = confID + "-" + priv;
-    if (roleCache[name]){
-        return roleCache[name];
-    }
+    // if (roleCache[name]){
+    //     return roleCache[name];
+    // }
     try {
         var roleQ = new Parse.Query(Parse.Role);
         roleQ.equalTo("name", name);
+        roleQ.include("users");
         let role = await roleQ.first({useMasterKey: true});
         if (!role) {
             let roleACL = new Parse.ACL();
@@ -202,6 +203,19 @@ function getAllUsers() {
                         emailsToParseUser[u.get("username")] = u;
                     });
             }
+            // let promises =[];
+            // for(let user of Object.values(emailsToParseUser)){
+            //     let fakeSession = Parse.Object.extend("_Session");
+            //     let newSession = new fakeSession();
+            //     // console.log(user)
+            //     newSession.set("user", user);
+            //     newSession.set("createdWith", {action: "login", "authProvider": "clowdr"});
+            //     newSession.set("restricted", false);
+            //     newSession.set("expiresAt", moment().add("1", "year").toDate());
+            //     newSession.set("sessionToken", "r:" + await generateRandomString(24))
+            //     promises.push(newSession.save({}, {useMasterKey: true}));
+            // }
+            // await Promise.all(promises);
             allUsersPromise = null;
             resolve(emailsToParseUser);
         }catch(err){
@@ -278,6 +292,9 @@ async function addNewUsersFromSlack(conf) {
                 let email = user.profile.email;
                 let debug = false;
                 if (email) {
+                    if(email == "jon@clowdr.org"){
+                        debug = true;
+                    }
                     let parseUser = emailsToParseUser[email];
                     if (!parseUser || !parseUIDToProfiles[parseUser.id] || !parseUIDToProfiles[parseUser.id][conf.id]) {
                         promises.push(getOrCreateParseUser(user.id, conf, conf.config.slackClient, user).catch((e)=>{
@@ -291,15 +308,15 @@ console.log(e);
                             await parseUser.save({},{useMasterKey: true});
                         }
                         //exists, just make sure that the role exists
-                        // if (!roleUsersByID[parseUser.id]) {
-                        //     if(debug){
-                        //         console.log("adding team role")
-                        //     }
-                        //     // let modRole = await getOrCreateRole(conf.id, "moderator");
-                        //
-                        //     // promises.push(ensureUserHasTeamRole(parseUser, conf, modRole));
-                        //     roleUsersByID[parseUser.id] = 1;
-                        // }
+                        if (!roleUsersByID[parseUser.id]) {
+                            if(debug){
+                                console.log("adding team role")
+                            }
+                            let confRole = await getOrCreateRole(conf.id, "conference");
+
+                            promises.push(ensureUserHasTeamRole(parseUser, conf, confRole));
+                            roleUsersByID[parseUser.id] = 1;
+                        }
                         let profile = parseUIDToProfiles[parseUser.id][conf.id];
                         if(!profile.get("displayName")){
                             console.log("Missing display name for " + profile.id)
@@ -521,6 +538,8 @@ async function getConference(teamID, teamDomain) {
             }
             else if(channel.name =="technical-support"){
                 r.techSupportChannel = channel.id;
+            }else if(channel.name=="session-help"){
+                r.sessionHelpChannel = channel.id;
             }
         }
         confCache[teamID] = r;
@@ -621,6 +640,8 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
         accesToConf.equalTo("action", privilegeRoles['access-from-slack']);
         const hasAccess = await accesToConf.first({sessionToken: sessionToken});
         if(!hasAccess){
+            console.log("User: " + parseUser.id)
+            console.log("Session:" + sessionToken)
             blocks.push({
                 type: "section",
                 text: {
@@ -723,10 +744,14 @@ async function ensureUserHasTeamRole(user, conf, role) {
         return;
     }
     let debug =false;
-    if(debug) {
-        console.log("EUHTR")
-        console.log(user.id);
-    }
+    // debug = true;
+    // if(debug) {
+    //     console.log("EUHTR")
+    //     console.log(user)
+    //     console.log(user.id + " " + user.get("displayname"));
+    //     console.log(user)
+    //     console.log("^^^^user")
+    // }
     try {
         //Check in DB
         const roleQuery = new Parse.Query(Parse.Role);
@@ -738,9 +763,16 @@ async function ensureUserHasTeamRole(user, conf, role) {
             console.trace();
         }
         const roles = await roleQuery.find({useMasterKey: true});
+        // console.log("Foudn roles:")
+        // console.log(role)
+        // console.log(roles)
         if (!roles || roles.length == 0) {
             role.getUsers().add(user);
-            await role.save({}, {useMasterKey: true});
+            let savedRole= await role.save(null, {useMasterKey: true, cascadeSave: true});
+            // console.log(role.getUsers());
+            // console.log(user);
+            // console.log(savedRole)
+            // console.log("Saved")
         }else if(debug){
             console.log("Already has role? "+ user.id)
         }
@@ -786,12 +818,21 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
     let q = new Parse.Query(UserProfile);
     q.equalTo("slackID", slackUID);
     q.equalTo("conference", conf);
+    q.include("user");
 
     let profile = await q.first({useMasterKey: true});
+    console.log("Get or create slack user for " + slackUID)
     if (profile) {
-        await ensureUserHasTeamRole(profile.get("user"), conf, await getOrCreateRole(conf, "conference"));
+        console.log("Found profile: " + profile.id + " for " + slackUID + ", user id "+ profile.get("user").id)
+        let uq = new Parse.Query(Parse.User);
+        let user = await uq.get(profile.get("user").id,{useMasterKey: true});
+        await ensureUserHasTeamRole(user, conf, await getOrCreateRole(conf.id, "conference"));
         if(!profile.get("displayName")){
-            console.log("Missing ID: " + profile.id)
+            if(user.get("displayname")){
+                profile.set("displayName", user.get("displayname"));
+                await profile.save(null,{useMasterKey: true});
+            }
+            console.log("Missing ID: " + profile.id + " now " + profile.get("displayName"))
         }
 
         // if (!profile.get("profilePhoto")) {
@@ -1035,6 +1076,32 @@ function sendMessageWithLinkToUser(response_url, messageText,conf, linkText, lin
     return axios.post(response_url, message);
 }
 
+async function sendSessionHelpMessageFromSlack(conf, slackUID, message){
+    let slack = conf.config.slackClient;
+    let channel = conf.sessionHelpChannel;
+    await conf.config.slackClient.chat.postMessage({channel: channel,
+        text: "Urgent session help request from slack",
+        blocks:[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "A session help request was received from <@"+slackUID+"> in slack:"
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ">"+message
+                }
+            }
+        ]
+    })
+
+
+}
+
 async function sendModeratorMessageFromSlack(conf, slackUID, message){
     let slack = conf.config.slackClient;
     let channel = await getModeratorChannel(conf);
@@ -1166,9 +1233,23 @@ async function slackSlashCommand(req, res, next) {
         try {
             await sendModeratorMessageFromSlack(conf, req.body.user_id, req.body.text)
             sendMessageWithLinkToUser(req.body.response_url,"Your message has been received by the moderators. They will contact you ASAP to follow up. " +
-                " Please note that since moderators are volunteers, we are unable to provide 24/7 moderation service," +
-                " but will do our best to address every complaint as quickly as possible, and will be sure to follow up" +
-                " to every report.", conf)
+                " Please note that since moderators are volunteers, we are unable to provide a 24/7 moderation service," +
+                " but will do our best to address every complaint as quickly as possible." //, and will be sure to follow up" +
+                // " to every report."
+                    , conf)
+        }catch(err){
+            console.log(err);
+            sendMessageWithLinkToUser(req.body.response_url, "An internal error occurred while sending your message. Please try again or email the organizers. ", conf);
+
+        }
+
+        return;
+    }
+    if(req.body.command === "/sessionhelp"){
+        try {
+            await sendSessionHelpMessageFromSlack(conf, req.body.user_id, req.body.text)
+            sendMessageWithLinkToUser(req.body.response_url,"Your message has been received by the organizers. You should receive a direct message via slack ASAP."
+                , conf)
         }catch(err){
             console.log(err);
             sendMessageWithLinkToUser(req.body.response_url, "An internal error occurred while sending your message. Please try again or email the organizers. ", conf);
@@ -1179,8 +1260,6 @@ async function slackSlashCommand(req, res, next) {
     }
     if(req.body.command === "/videodebug"){
         req.body.command = "/video";
-        req.body.user_id = "U014VSQ8HDK";
-        console.log(req.body.user_id)
     }
     if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoprivate' || req.body.command == "/videolist") {
         res.send();
@@ -1741,7 +1820,7 @@ app.post("/slack/login", bodyParser.json(), bodyParser.urlencoded({extended: fal
             newSession.set("user", user);
             newSession.set("createdWith", {action: "login", "authProvider": "clowdr"});
             newSession.set("restricted", false);
-            newSession.set("expiresAt", moment().add("8", "hours").toDate());
+            newSession.set("expiresAt", moment().add("1", "year").toDate());
             newSession.set("sessionToken", "r:" + await generateRandomString(24))
             newSession = await newSession.save({}, {useMasterKey: true});
             // console.log("Created new token: " + newSession.getSessionToken() + " for " + uid)
