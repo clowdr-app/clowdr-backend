@@ -1,6 +1,6 @@
 const twilio = require('twilio');
 const AccessToken = twilio.jwt.AccessToken;
-const { VideoGrant } = AccessToken;
+const { VideoGrant, ChatGrant } = AccessToken;
 
 
 function generateToken(config){
@@ -11,7 +11,6 @@ function generateToken(config){
   );
 }
 
-const ChatGrant = AccessToken.IpMessagingGrant;
 
 const videoToken = (identity, room, config) => {
   let videoGrant;
