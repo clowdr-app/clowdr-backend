@@ -598,6 +598,8 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
         userIDToSession[parseUser.id] = sessionToken;
     }
     let rooms = roomCache[parseUser.id];
+    let techSupportRoom = conf.techSupportChannel;
+
     if(!rooms){
         const accesToConf = new Parse.Query(InstancePermission);
         accesToConf.equalTo("conference", conf);
@@ -668,26 +670,34 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
         let joinAccy;
 
         const link = await buildLink(room.id, room.get("title"), parseUser, conf, teamID);
-        joinAccy = {
-            type: "button",
-            action_id: "join_video",
-            value: room.id,
-            url: link,
-            text: {
-                type: "plain_text",
-                text: "Join Video"
-            }
-        }
+        // joinAccy = {
+        //     type: "button",
+        //     action_id: "join_video",
+        //     value: room.id,
+        //     url: link,
+        //     text: {
+        //         type: "plain_text",
+        //         text: "Join Video"
+        //     }
+        // }
         let block = {
             type: "section",
             text: {
                 type: "mrkdwn",
-                text: room.get("title") + ": " + membersString,
+                text: "<"+link+"|"+room.get("title") + ">: " + membersString,
             },
-            accessory: joinAccy
+            // accessory: joinAccy
         }
         blocks.push(block);
     }
+    let msg = "Please make sure to open links from this bot in Chrome or Safari (sorry, the mobile-embedded browser won't work, and Firefox will not work very well). " + (techSupportRoom ? "Having trouble with technical issues? Come join <#"+techSupportRoom+">.":"")
+    blocks.push({
+        type: "section", text: {
+            type: "mrkdwn",
+            text: msg
+
+        },
+    })
     // console.log(JSON.stringify(blocks, null, 2));
 }
 
