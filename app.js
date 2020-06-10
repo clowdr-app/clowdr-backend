@@ -276,17 +276,16 @@ console.log(e);
                             await parseUser.save({},{useMasterKey: true});
                         }
                         //exists, just make sure that the role exists
-                        if (!roleUsersByID[parseUser.id]) {
-                            if(debug){
-                                console.log("adding team role")
-                            }
-                            let modRole = await getOrCreateRole(conf.id, "moderator");
-
-                            promises.push(ensureUserHasTeamRole(parseUser, conf, modRole));
-                            roleUsersByID[parseUser.id] = 1;
-                        }
+                        // if (!roleUsersByID[parseUser.id]) {
+                        //     if(debug){
+                        //         console.log("adding team role")
+                        //     }
+                        //     // let modRole = await getOrCreateRole(conf.id, "moderator");
+                        //
+                        //     // promises.push(ensureUserHasTeamRole(parseUser, conf, modRole));
+                        //     roleUsersByID[parseUser.id] = 1;
+                        // }
                         let profile = parseUIDToProfiles[parseUser.id][conf.id];
-                        // console.log(parseUIDToProfiles)
                         if(!profile.get("displayName")){
                             profile.set("displayName",user.profile.real_name);
                             promises.push(profile.save({},{useMasterKey: true}));
@@ -1802,7 +1801,7 @@ async function runBackend(){
             instances.forEach(
                 async (inst) => {
                     try {
-                        if (inst.get("slackWorkspace"))
+                        if (inst.get("slackWorkspace")){ //&& inst.id =='pvckfSmmTp')
                             promises.push(getConference(inst.get("slackWorkspace")).then((conf)=>{
                                 console.log("Finished "+ conf.get("conferenceName"))
                             }).catch(err => {
