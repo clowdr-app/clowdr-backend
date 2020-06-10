@@ -1258,6 +1258,16 @@ async function slackSlashCommand(req, res, next) {
 
         return;
     }
+    if(req.body.command == "/gather"){
+        if(conf.config.GATHER_LINK)
+        {
+            sendMessageWithLinkToUser(req.body.response_url,"Join the virtual space in Gather at "+conf.config.GATHER_LINK, conf);
+        }
+        else{
+            sendMessageWithLinkToUser(req.body.response_url,"This feature is not enabled on this slack workspace.", conf);
+        }
+        return
+    }
     if(req.body.command === "/videodebug"){
         req.body.command = "/video";
     }
