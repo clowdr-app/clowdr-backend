@@ -153,6 +153,21 @@ slackEvents.on('team_join', async (event) => {
     console.log("Created parse user: " + parseUser.get("displayname") + " in " + conf.get("conferenceName"));
 });
 
+slackEvents.on('user_change', async (event) => {
+    let conf = await getConference(event.user.team_id, "unknown");
+    let q = new Parse.Query(UserProfile);
+    q.equalTo("slackID", event.user.id);
+    q.equalTo("conference", conf);
+
+    let slackProfile = event.user;
+    let profile = await q.first({useMasterKey: true});
+    if (profile) {
+        if(profile.get("displayName") != slackProfile.real_name){
+            profile.set("displayName", slackProfile.real_name);
+            await profile.save({},{useMasterKey:true});
+        }
+    }
+});
 
 function getAllUsers() {
     if (allUsersPromise)
@@ -287,6 +302,7 @@ console.log(e);
                         // }
                         let profile = parseUIDToProfiles[parseUser.id][conf.id];
                         if(!profile.get("displayName")){
+                            console.log("Missing display name for " + profile.id)
                             profile.set("displayName",user.profile.real_name);
                             promises.push(profile.save({},{useMasterKey: true}));
                         }
@@ -774,6 +790,10 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
     let profile = await q.first({useMasterKey: true});
     if (profile) {
         await ensureUserHasTeamRole(profile.get("user"), conf, await getOrCreateRole(conf, "conference"));
+        if(!profile.get("displayName")){
+            console.log("Missing ID: " + profile.id)
+        }
+
         // if (!profile.get("profilePhoto")) {
         //     if(!slackProfile){
         //         slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
