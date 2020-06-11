@@ -1529,6 +1529,18 @@ async function createNewRoom(req, res){
                         let userProfile = await getUserProfile(parseUser.id, conf);
                         console.log("Creating chat room for " + roomName + " starting user " + userProfile.id)
                         await chat.channels(twilioChatRoom.sid).members.create({identity: userProfile.id});
+                        //Make sure that all moderators and admins have access to this room, too.
+                        let modRole = await getOrCreateRole(conf.id,"moderator");
+                        let userQuery = modRole.getUsers().query();
+                        let profilesQuery = new Parse.Query(UserProfile);
+                        profilesQuery.equalTo("conference", conf);
+                        profilesQuery.matchesQuery("user", userQuery);
+                        profilesQuery.find({useMasterKey: true}).then((users)=>{
+                            for(let user of users){
+                                 chat.channels(twilioChatRoom.sid).members.create({identity: user.id});
+                            }
+                        })
+
                         acl.setReadAccess(parseUser.id, true);
                     }
                     else{
@@ -1691,6 +1703,7 @@ async function sendModeratorMessage(req,res){
     if(usersString.length > 0){
         usersString = usersString.substring(0,usersString.length - 2);
     }
+    console.log(usersString)
     //Compose and send a message on slack.
     let slack = conf.config.slackClient;
     let channel = await getModeratorChannel(conf);
