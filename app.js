@@ -1603,6 +1603,46 @@ async function getUserProfile(uid, conf){
     }
     return uidToProfileCache[cacheKey];
 }
+async function updateFollow(req,res){
+    try {
+        roomCache = {};
+        let identity = req.body.identity;
+        const roomID = req.body.roomID;
+        const conference = req.body.slackTeam;
+        const users = req.body.users;
+        const add = req.body.add;
+
+        let conf = await getConference(conference);
+        let userQ = new Parse.Query(Parse.Session);
+        userQ.equalTo("sessionToken", identity);
+        // let parseSession = await userQ.first({useMasterKey: true});
+        // let parseUser = parseSession.get("user");
+        let profileQ = new Parse.Query(UserProfile);
+        profileQ.equalTo("conference", conf);
+        profileQ.matchesKeyInQuery("user","user", userQ);
+        let profile = await profileQ.first({useMasterKey: true});
+        //Check for roles...
+        let roomQ = new Parse.Query("BreakoutRoom");
+        let room = await roomQ.get(roomID, {sessionToken: identity});
+        if (!room) {
+            return res.send({status: 'error', message: "No such room"});
+        }
+        let watchers = room.get("watchers");
+        if(!watchers)
+            watchers = [];
+        if(add)
+            watchers.push(profile);
+        else
+            watchers = watchers.filter(p=>p.id != profile.id);
+        room.set("watchers", watchers);
+        await room.save({}, {useMasterKey: true});
+        res.send({status: "OK"});
+    } catch (err) {
+        console.log(err);
+        res.send({status: "error", message: "Internal server error"});
+    }
+}
+
 async function updateACL(req,res){
     try {
         roomCache = {};
@@ -1703,7 +1743,6 @@ async function sendModeratorMessage(req,res){
     if(usersString.length > 0){
         usersString = usersString.substring(0,usersString.length - 2);
     }
-    console.log(usersString)
     //Compose and send a message on slack.
     let slack = conf.config.slackClient;
     let channel = await getModeratorChannel(conf);
@@ -1744,6 +1783,9 @@ app.post("/moderator/fromVideo", bodyParser.json(), bodyParser.urlencoded({exten
 })
 app.post("/video/acl", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     await updateACL(req, res);
+})
+app.post("/video/follow", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
+    await updateFollow(req, res);
 })
 app.post("/video/token", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     try {
