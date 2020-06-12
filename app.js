@@ -870,14 +870,14 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
             profile.set("user", u);
             profile.set("conference", conf);
             profile.set("slackID", slackUID);
-            profile.set("displayName", slackProfile.profile.real_name);
+            profile.set("displayName", user_info.real_name);
             let profileACL = new Parse.ACL();
             profileACL.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
             profileACL.setWriteAccess(u, true);
             profile.setACL(profileACL);
-            if(!slackProfile){
-                slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
-            }
+            // if(!slackProfile){
+            //     slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
+            // }
             // if(slackProfile.profile && slackProfile.profile.image_512) {
             //     try {
             //         let url = slackProfile.profile.image_512;
