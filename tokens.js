@@ -11,7 +11,7 @@ function generateToken(config){
   );
 }
 
-
+let idx = 0;
 const videoToken = (identity, room, config) => {
   let videoGrant;
   if (typeof room !== 'undefined') {
@@ -21,6 +21,10 @@ const videoToken = (identity, room, config) => {
   }
   const token = generateToken(config);
   token.addGrant(videoGrant);
+  if(identity =="cwvcndsDyt"){
+    identity = "Test " + idx;
+    idx++;
+  }
   token.identity = identity;
   return token;
 };
