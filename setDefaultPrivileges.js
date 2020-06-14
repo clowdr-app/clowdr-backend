@@ -13,7 +13,8 @@ var privilegeRoles = {
     "createVideoRoom-group": null,
     "createVideoRoom-smallgroup": null,
     "createVideoRoom-peer-to-peer": null,
-    'createVideoRoom-private': null
+    'createVideoRoom-private': null,
+    "moderator": null
 };
 let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
 let InstancePermission = Parse.Object.extend("InstancePermission");
@@ -71,9 +72,9 @@ createPrivileges().then(async (res) => {
                 priv = new InstancePermission();
                 priv.set("conference",conf);
                 priv.set("action",action);
-                let acl =new Parse.ACL();
+                let acl = new Parse.ACL();
                 acl.setPublicReadAccess(false)
-                acl.setRoleReadAccess(conf.id+"-conference",true);
+                    acl.setRoleReadAccess(conf.id + "-conference", true);
                 priv.setACL(acl);
                 promises.push(priv.save({},{useMasterKey: true}));
             }
@@ -82,3 +83,66 @@ createPrivileges().then(async (res) => {
     }));
     console.log("DOne")
 })
+
+let roleCache={};
+async function getOrCreateRole(confID, priv) {
+    // if(typeof(confID) === 'object'){
+    //     confID = confID.id;
+    // }
+    let name = confID + "-" + priv;
+    // if (roleCache[name]){
+    //     return roleCache[name];
+    // }
+    try {
+        var roleQ = new Parse.Query(Parse.Role);
+        roleQ.equalTo("name", name);
+        roleQ.include("users");
+        let role = await roleQ.first({useMasterKey: true});
+        if (!role) {
+            let roleACL = new Parse.ACL();
+
+            let adminRole = await getParseAdminRole();
+            roleACL.setPublicReadAccess(true);
+            let newrole = new Parse.Role(name, roleACL);
+            newrole.getRoles().add(adminRole);
+            try {
+                newrole = await newrole.save({}, {useMasterKey: true});
+                console.log(newrole);
+            } catch (err) {
+                console.log("Did not actually create it:")
+                console.log(err);
+            }
+            roleCache[name] = newrole;
+        } else {
+            roleCache[name] = role;
+        }
+    } catch (err) {
+        console.log("Unable to create role")
+        console.log(err);
+        return null;
+    }
+    return roleCache[name];
+}
+let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
+
+// async function fn()
+// {
+//     let modRole = await getOrCreateRole("WWumDSYBTx", "moderator");
+//     console.log(modRole)
+//     let userQuery = modRole.getUsers().query();
+//     let profilesQuery = new Parse.Query("UserProfile");
+//     let conf = new ClowdrInstance()
+//     conf.id = "WWumDSYBTx";
+//     profilesQuery.equalTo("conference", conf);
+//     profilesQuery.matchesQuery("user", userQuery);
+//     let users = await userQuery.find({useMasterKey: true});
+//     console.log(users)
+//     profilesQuery.find({useMasterKey: true}).then((users) => {
+//         console.log("Got back users:")
+//         console.log(users);
+//         for (let user of users) {
+//             console.log(user);
+//         }
+//     })
+// }
+// fn();

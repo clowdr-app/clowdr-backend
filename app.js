@@ -182,6 +182,7 @@ function getAllUsers() {
             let parseUserQ = new Parse.Query(Parse.User);
             parseUserQ.limit(1000);
             parseUserQ.withCount();
+            parseUserQ.include("profiles");
             let nRetrieved = 0;
             let {count, results} = await parseUserQ.find({useMasterKey: true});
             nRetrieved = results.length;
@@ -271,7 +272,13 @@ function getAllUsers() {
 
 async function addNewUsersFromSlack(conf) {
     try {
-        let slackUsers = await conf.config.slackClient.users.list();
+        let slackUsers = await conf.config.slackClient.users.list({limit: 1000});
+        let allSlackMembers = slackUsers.members;
+        while(slackUsers.response_metadata.next_cursor){
+            slackUsers = await conf.config.slackClient.users.list({limit: 100, cursor: slackUsers.response_metadata.next_cursor})
+            allSlackMembers = allSlackMembers.concat(slackUsers.members);
+        }
+        console.log(conf.get("conferenceName") + " fetched from slack: " + allSlackMembers.length)
         await getAllUsers();
 
         let confRole = await getOrCreateRole(conf.id, "conference");
@@ -287,8 +294,8 @@ async function addNewUsersFromSlack(conf) {
         // console.log(Object.keys(emailsToParseUser));
         // return;
         let promises = [];
-        if (slackUsers.members) {
-            for (let user of slackUsers.members) {
+        if (allSlackMembers) {
+            for (let user of allSlackMembers) {
                 let email = user.profile.email;
                 let debug = false;
                 if (email) {
@@ -318,7 +325,7 @@ console.log(e);
                             roleUsersByID[parseUser.id] = 1;
                         }
                         let profile = parseUIDToProfiles[parseUser.id][conf.id];
-                        if(!profile.get("displayName")){
+                        if(!profile.get("displayName") || user.profile.real_name != profile.get("displayName")){
                             console.log("Missing display name for " + profile.id)
                             profile.set("displayName",user.profile.real_name);
                             promises.push(profile.save({},{useMasterKey: true}));
@@ -794,7 +801,8 @@ var privilegeRoles = {
     "createVideoRoom-group": null,
     "createVideoRoom-smallgroup": null,
     "createVideoRoom-peer-to-peer": null,
-    'createVideoRoom-private': null
+    'createVideoRoom-private': null,
+    "moderator": null
 };
 
 async function createPrivileges() {
@@ -829,6 +837,7 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
         await ensureUserHasTeamRole(user, conf, await getOrCreateRole(conf.id, "conference"));
         if(!profile.get("displayName")){
             if(user.get("displayname")){
+                console.log("Set to " + user.get("displayname"));
                 profile.set("displayName", user.get("displayname"));
                 await profile.save(null,{useMasterKey: true});
             }
@@ -909,6 +918,7 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
         profile.set("user", user);
         profile.set("conference", conf);
         profile.set("slackID", slackUID);
+        profile.set("displayName", user.get("displayname"));
         let profileACL = new Parse.ACL();
         profileACL.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
         profileACL.setWriteAccess(user, true);
@@ -961,6 +971,7 @@ async function createParseUserAndEnsureRole(slackUser, conf, role) {
     let userACL = new Parse.ACL();
     userACL.setWriteAccess(user, true);
     userACL.setReadAccess(user, true);
+    userACL.setRoleReadAccess("moderators", true);
     userACL.setPublicReadAccess(false);
     user.setACL(userACL);
     await user.save({},{useMasterKey: true})
@@ -1261,7 +1272,7 @@ async function slackSlashCommand(req, res, next) {
     if(req.body.command == "/gather"){
         if(conf.config.GATHER_LINK)
         {
-            sendMessageWithLinkToUser(req.body.response_url,"Join the virtual space in Gather at "+conf.config.GATHER_LINK, conf);
+            sendMessageWithLinkToUser(req.body.response_url,"Join the virtual space in Gather at "+conf.config.GATHER_LINK + " Please note that Gather supports only Firefox and Chrome", conf);
         }
         else{
             sendMessageWithLinkToUser(req.body.response_url,"This feature is not enabled on this slack workspace.", conf);
@@ -1492,7 +1503,7 @@ async function createNewRoom(req, res){
                     console.log("creating room with callback" + conf.config.TWILIO_CALLBACK_URL)
                     console.log("For " + parseUser.id + ": " + parseUser.get("displayname"))
                     console.log(roomName)
-                    let maxParticipants = (mode == "peer-to-peer" ? 10 : (mode == "group-small" ? 4 : 24));
+                    let maxParticipants = (mode == "peer-to-peer" ? 10 : (mode == "group-small" ? 4 : 50));
                     let twilioRoom = await twilio.video.rooms.create({
                         type: mode,
                         // type: conf.config.TWILIO_ROOM_TYPE,
@@ -1936,6 +1947,74 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
     // });
 });
+
+app.post('/chat/deleteMessage',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
+    const identity = req.body.identity;
+    const messageSID = req.body.message;
+    const channelSID = req.body.room;
+    console.log(req.body)
+    let conf = await getConference(req.body.conference);
+    try {
+        const accesToConf = new Parse.Query(InstancePermission);
+        accesToConf.equalTo("conference", conf);
+        accesToConf.equalTo("action", privilegeRoles['moderator']);
+        const hasAccess = await accesToConf.first({sessionToken: identity});
+        if(!hasAccess){
+            res.status(403);
+            res.send();
+            return;
+        }
+        let chat = await conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).channels(channelSID).messages(messageSID).remove();
+        console.log(chat)
+        res.send({status: "OK"});
+    } catch (err) {
+        next(err);
+    }
+    // newNode[uid] = true;
+    // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
+    // });
+});
+
+app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
+    const identity = req.body.identity;
+    const profileToBan = req.body.profileID;
+    const isBan = req.body.isBan;
+    let conf = await getConference(req.body.conference);
+    try {
+        const accesToConf = new Parse.Query(InstancePermission);
+        accesToConf.equalTo("conference", conf);
+        accesToConf.equalTo("action", privilegeRoles['moderator']);
+        const hasAccess = await accesToConf.first({sessionToken: identity});
+        if(!hasAccess){
+            res.status(403);
+            res.send();
+            return;
+        }
+        let profileQ = new Parse.Query(UserProfile);
+        let profile = await profileQ.get(profileToBan, {useMasterKey: true});
+        if(isBan){
+            profile.set("isBanned",true);
+            let bannedACL = new Parse.ACL();
+            bannedACL.setWriteAccess(profile.get("user"), false);
+            profile.setACL(bannedACL);
+            await profile.save({},{useMasterKey: true});
+        }else{
+            profile.set("isBanned",false);
+            let notBannedACL = new Parse.ACL();
+            notBannedACL.setWriteAccess(profile.get("user"), true);
+            profile.setACL(notBannedACL);
+            await profile.save({},{useMasterKey: true});
+        }
+        await pushToUserStream(profile.get("user"), conf, "profile");
+        res.send({status: "OK"});
+    } catch (err) {
+        next(err);
+    }
+    // newNode[uid] = true;
+    // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
+    // });
+});
+
 
 
 
