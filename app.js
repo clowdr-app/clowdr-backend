@@ -1006,7 +1006,7 @@ function sendMessageWithLinkToUser(response_url, messageText,conf, linkText, lin
             },
         ],
         "attachments": [{
-            "text": (link?"Please make sure to open this link in Chrome or Safari (sorry, the mobile-embedded browser won't work, and Firefox will not work very well). " : "")+ (techSupportRoom ? "Having trouble with technical issues? Come join <#"+techSupportRoom+">.":"")
+            "text": (link?"If you are on mobile, please be sure to open this in a real browser (e.g. not in the embedded slack browser). We have tested support for Safari, Firefox, Chrome and Edge." : "")+ (techSupportRoom ? "Having trouble with technical issues? Come join <#"+techSupportRoom+">.":"")
         }]
     };
     if(link){
