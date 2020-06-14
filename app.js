@@ -751,14 +751,6 @@ async function ensureUserHasTeamRole(user, conf, role) {
         return;
     }
     let debug =false;
-    // debug = true;
-    // if(debug) {
-    //     console.log("EUHTR")
-    //     console.log(user)
-    //     console.log(user.id + " " + user.get("displayname"));
-    //     console.log(user)
-    //     console.log("^^^^user")
-    // }
     try {
         //Check in DB
         const roleQuery = new Parse.Query(Parse.Role);
@@ -770,16 +762,9 @@ async function ensureUserHasTeamRole(user, conf, role) {
             console.trace();
         }
         const roles = await roleQuery.find({useMasterKey: true});
-        // console.log("Foudn roles:")
-        // console.log(role)
-        // console.log(roles)
         if (!roles || roles.length == 0) {
             role.getUsers().add(user);
             let savedRole= await role.save(null, {useMasterKey: true, cascadeSave: true});
-            // console.log(role.getUsers());
-            // console.log(user);
-            // console.log(savedRole)
-            // console.log("Saved")
         }else if(debug){
             console.log("Already has role? "+ user.id)
         }
@@ -884,35 +869,13 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
             profileACL.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
             profileACL.setWriteAccess(u, true);
             profile.setACL(profileACL);
-            // if(!slackProfile){
-            //     slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
-            // }
-            // if(slackProfile.profile && slackProfile.profile.image_512) {
-            //     try {
-            //         let url = slackProfile.profile.image_512;
-            //         let extension = slackProfile.profile.image_512.substring(slackProfile.profile.image_512.length-3);
-            //         let fileName = "slack-profile-photo-"+slackUID+"."+extension;
-            //         let file = new Parse.File(fileName, {
-            //             uri: url
-            //         });
-            //         let res = await file.save({useMasterKey: true});
-            //         profile.set("profilePhoto", res);
-            //         profile.save({},{useMasterKey: true})
-            //     } catch (err) {
-            //         profile.set("profilePhoto", undefined)
-            //         // console.log(err)
-            //     }
-            // }
+
             await profile.save({}, {useMasterKey: true});
             await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
             u.get("profiles").add(profile);
             await u.save({}, {useMasterKey: true});
             return u;
         }
-        // if (!conf.config.AUTO_CREATE_USER) {
-        //     console.log("AUTO CREATE IS DISABLED!")
-        //     return null; //TODO send an error back to the user, include the email address and conference name
-        // }
         let user = await createParseUserAndEnsureRole(user_info.user, conf, await getOrCreateRole(conf.id, "conference"));
         let profile = new UserProfile();
         profile.set("user", user);
@@ -923,25 +886,6 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
         profileACL.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
         profileACL.setWriteAccess(user, true);
         profile.setACL(profileACL);
-        // if(!slackProfile){
-        //     slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
-        // }
-        // if(slackProfile.profile.image_512) {
-        //     try {
-        //         let url = slackProfile.profile.image_512;
-        //         let extension = slackProfile.profile.image_512.substring(slackProfile.profile.image_512.length-3);
-        //         let file = new Parse.File("slack-profile-photo"+slackUID+"."+extension, {
-        //             uri: url
-        //         });
-        //         let res = await file.save({useMasterKey: true});
-        //         profile.set("profilePhoto", res);
-        //         profile.save({},{useMasterKey: true})
-        //     } catch (err) {
-        //         profile.set("profilePhoto", undefined);
-        //         console.log("Bailed on saving profile.")
-        //         // console.log(err)
-        //     }
-        // }
         profile = await profile.save({}, {useMasterKey: true});
         let relation = user.relation("profiles");
         relation.add(profile);
@@ -1703,9 +1647,11 @@ async function updateACL(req,res){
                 usersToRefresh.push(fauxUser);
             }
         }
-
-
-        await room.save({}, {useMasterKey: true});
+        if(users.length == 0){
+            await room.destroy({useMasterKey: true});
+        }else {
+            await room.save({}, {useMasterKey: true});
+        }
         await Promise.all(promises);
 
         promises = [];
@@ -1975,6 +1921,41 @@ app.post('/chat/deleteMessage',bodyParser.json(), bodyParser.urlencoded({extende
     // });
 });
 
+app.post('/video/deleteRoom',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
+    const identity = req.body.identity;
+    const roomID = req.body.room;
+    console.log('"'+roomID+"'");
+    let conf = await getConference(req.body.conference);
+    try {
+        const accesToConf = new Parse.Query(InstancePermission);
+        accesToConf.equalTo("conference", conf);
+        accesToConf.equalTo("action", privilegeRoles['moderator']);
+        const hasAccess = await accesToConf.first({sessionToken: identity});
+        if(!hasAccess){
+            res.status(403);
+            res.send();
+            return;
+        }
+        //First, remove all users.
+        let roomQ = new Parse.Query(BreakoutRoom);
+        let room = await roomQ.get(roomID, {useMasterKey: true});
+        let promises = [];
+        for(let member of room.get("members")){
+            console.log("Kick: " + member.id);
+            promises.push(removeFromCall(conf.twilio,room.get("twilioID"), member.id));
+        }
+        await Promise.all(promises);
+        await room.destroy({useMasterKey: true});
+        res.send({status: "OK"});
+    } catch (err) {
+        next(err);
+    }
+    // newNode[uid] = true;
+    // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
+    // });
+});
+
+
 app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
     const identity = req.body.identity;
     const profileToBan = req.body.profileID;
@@ -1991,24 +1972,44 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
             return;
         }
         let profileQ = new Parse.Query(UserProfile);
+        profileQ.include("user");
         let profile = await profileQ.get(profileToBan, {useMasterKey: true});
         if(isBan){
             profile.set("isBanned",true);
             let bannedACL = new Parse.ACL();
             bannedACL.setWriteAccess(profile.get("user"), false);
+            bannedACL.setRoleReadAccess(conf.id+"-conference", true);
             profile.setACL(bannedACL);
             await profile.save({},{useMasterKey: true});
+
+            //Deny user read access to their own record
+            let user = profile.get("user");
+            let bannedUserACL = new Parse.ACL();
+            user.setACL(bannedUserACL);
+            await user.save({},{useMasterKey: true});
         }else{
             profile.set("isBanned",false);
             let notBannedACL = new Parse.ACL();
             notBannedACL.setWriteAccess(profile.get("user"), true);
+            notBannedACL.setRoleReadAccess(conf.id+"-conference", true);
+
             profile.setACL(notBannedACL);
-            await profile.save({},{useMasterKey: true});
+            await profile.save({}, {useMasterKey: true});
+            let user = profile.get("user");
+
+            let userACL = new Parse.ACL();
+            userACL.setWriteAccess(user, true);
+            userACL.setReadAccess(user, true);
+            user.setACL(userACL);
+            await user.save({},{useMasterKey: true});
+
         }
         await pushToUserStream(profile.get("user"), conf, "profile");
         res.send({status: "OK"});
     } catch (err) {
-        next(err);
+        res.status(500);
+        console.log(err);
+        res.send({status: "error", message: "Internal server error, please check logs"})
     }
     // newNode[uid] = true;
     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
