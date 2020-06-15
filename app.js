@@ -492,8 +492,8 @@ async function getConference(teamID, teamDomain) {
             }
         }
 
-        if (!process.env.SKIP_INIT)
-            await addNewUsersFromSlack(r);
+        // if (!process.env.SKIP_INIT)
+            // await addNewUsersFromSlack(r);
 
         let adminRole = await getParseAdminRole();
         let adminsQ = adminRole.getUsers().query();
