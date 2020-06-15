@@ -37,11 +37,11 @@ app.use('/slack/events', slackEvents.expressMiddleware());
 
 app.use('/slack/interaction', slackInteractions.expressMiddleware());
 app.post('/slack/commands', bodyParser.urlencoded({extended: false}), slackSlashCommand);
-const sidToRoom = {};
 const confCache = {};
 const confIDToConf = {};
 const userToAuthData = {};
 const userToWorkspaces = {};
+var sidToRoom = {};
 
 let SlackHomeBlocks = Parse.Object.extend("SlackHomeBlocks");
 let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
@@ -627,7 +627,7 @@ async function getConfig(conf) {
 }
 
 var userIDToSession = {};
-var roomCache = {};
+var parseRoomCache = {};
 async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) {
 
     let sessionToken = userIDToSession[parseUser.id];
@@ -638,36 +638,15 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
         sessionToken = parseSession.getSessionToken();
         userIDToSession[parseUser.id] = sessionToken;
     }
-    let rooms = roomCache[parseUser.id];
     let techSupportRoom = conf.techSupportChannel;
 
-    if(!rooms){
-        const accesToConf = new Parse.Query(InstancePermission);
-        accesToConf.equalTo("conference", conf);
-        accesToConf.equalTo("action", privilegeRoles['access-from-slack']);
-        const hasAccess = await accesToConf.first({sessionToken: sessionToken});
-        if(!hasAccess){
-            console.log("User: " + parseUser.id)
-            console.log("Session:" + sessionToken)
-            blocks.push({
-                type: "section",
-                text: {
-                    type: "mrkdwn",
-                    text: "Sorry, this feature is not yet enabled."
-                }
-            })
-            roomCache[parseUser.id] = "no-access";
-            return;
-        }
-
-        let query = new Parse.Query(BreakoutRoom);
-        query.include("members");
-        query.equalTo("conference", conf);
-        query.limit(100);
-        rooms = await query.find({sessionToken: sessionToken});
-        roomCache[parseUser.id] = rooms;
-    }
-    else if(rooms == "no-access"){
+    const accesToConf = new Parse.Query(InstancePermission);
+    accesToConf.equalTo("conference", conf);
+    accesToConf.equalTo("action", privilegeRoles['access-from-slack']);
+    const hasAccess = await accesToConf.first({sessionToken: sessionToken});
+    if (!hasAccess) {
+        console.log("User: " + parseUser.id)
+        console.log("Session:" + sessionToken)
         blocks.push({
             type: "section",
             text: {
@@ -675,9 +654,14 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
                 text: "Sorry, this feature is not yet enabled."
             }
         })
-        roomCache[parseUser.id] = "no-access";
         return;
     }
+
+    let query = new Parse.Query(BreakoutRoom);
+    query.include("members");
+    query.equalTo("conference", conf);
+    query.limit(100);
+    let rooms = await query.find({sessionToken: sessionToken});
 
     if (rooms.length == 0) {
         blocks.push({
@@ -828,26 +812,6 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
             }
             console.log("Missing ID: " + profile.id + " now " + profile.get("displayName"))
         }
-
-        // if (!profile.get("profilePhoto")) {
-        //     if(!slackProfile){
-        //         slackProfile = await conf.config.slackClient.users.profile.get({user: slackUID});
-        //     }
-        //     if(slackProfile.profile.image_512) {
-        //         try {
-        //             let url = slackProfile.profile.image_512;
-        //             let extension = slackProfile.profile.image_512.substring(slackProfile.profile.image_512.length-3);
-        //             let file = new Parse.File("slack-profile-photo"+slackUID+"."+extension, {
-        //                 uri: url
-        //             });
-        //             let res = await file.save({useMasterKey: true});
-        //             profile.set("profilePhoto", res);
-        //             await profile.save({},{useMasterKey: true})
-        //         } catch (err) {
-        //             console.log(err)
-        //         }
-        //     }
-        // }
         return profile.get("user");
     }
     //Now try to retrieve by email
@@ -1178,6 +1142,8 @@ async function slackSlashCommand(req, res, next) {
     let teamID = req.body.team_id;
     res.status(200).end();
     let conf = await getConference(req.body.team_id, req.body.team_domain)
+    console.log(conf.id)
+    console.log(req.body.user_id)
     //
     // if(req.body.command == "/login"){
     //     res.send();
@@ -1262,6 +1228,13 @@ async function processTwilioEvent(req, res) {
     try {
         let room = sidToRoom[roomSID];
         if (req.body.StatusCallbackEvent == 'participant-connected') {
+            if(!room)
+            {
+                //Race
+                let roomQ = new Parse.Query(BreakoutRoom);
+                roomQ.equalTo("twilioID", roomSID);
+                room = await roomQ.first({useMasterKey: true});
+            }
             let uid = req.body.ParticipantIdentity;
             let userFindQ = new Parse.Query(UserProfile);
             let user = await userFindQ.get(uid, {useMasterKey: true});
@@ -1408,7 +1381,6 @@ app.post("/video/new", bodyParser.json(), bodyParser.urlencoded({extended: false
   return await createNewRoom(req, res);
 });
 async function createNewRoom(req, res){
-    roomCache = {};
     //Validate parse user can create this room
     let token = req.body.identity;
     // let conf = req.body.conf;
@@ -1560,7 +1532,6 @@ async function getUserProfile(uid, conf){
 }
 async function updateFollow(req,res){
     try {
-        roomCache = {};
         let identity = req.body.identity;
         const roomID = req.body.roomID;
         const conference = req.body.slackTeam;
@@ -1600,7 +1571,6 @@ async function updateFollow(req,res){
 
 async function updateACL(req,res){
     try {
-        roomCache = {};
         let identity = req.body.identity;
         const roomID = req.body.roomID;
         const conference = req.body.slackTeam;
@@ -2035,19 +2005,55 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
 //     }
 // });
 
+var parseLive = new Parse.LiveQueryClient({
+    applicationId: process.env.REACT_APP_PARSE_APP_ID,
+    serverURL: process.env.REACT_APP_PARSE_DOMAIN,
+    javascriptKey: process.env.REACT_APP_PARSE_JS_KEY,
+});
+parseLive.open();
+
 //At boot, we should still clear out our cache locally
 async function runBackend(){
     let promises = [];
     await createPrivileges();
-    if(!process.env.SKIP_INIT) {
+    let SessionQuery  =new Parse.Query(Parse.Session);
+    let fauxUser = new Parse.User();
+    fauxUser.id = "bO7cu90Ypk";
+    SessionQuery.equalTo("user",fauxUser);
+
+    let sessionToken = await SessionQuery.first({useMasterKey: true});
+    console.log(sessionToken)
+
+    sessionToken = sessionToken.get("sessionToken");
+
+    let query = new Parse.Query("BreakoutRoom");
+    query.limit(1000);
+    let rooms = await query.find({useMasterKey: true});
+    for(let room of rooms){
+        parseRoomCache[room.id] = room;
+        sidToRoom[room.get("twilioID")] = room;
+    }
+    var roomSubscription = parseLive.subscribe(query, sessionToken);
+    roomSubscription.on('create', (vid) => {
+        parseRoomCache[vid.id] = vid;
+    })
+    roomSubscription.on("delete", vid => {
+        parseRoomCache[vid.id] = undefined;
+    });
+    roomSubscription.on('update', (newItem) => {
+        parseRoomCache[vid.id] = newItem;
+    });
+
+
+    if (!process.env.SKIP_INIT) {
         let query = new Parse.Query(ClowdrInstance);
         query.find({useMasterKey: true}).then((instances) => {
             instances.forEach(
                 async (inst) => {
                     try {
                         if (inst.get("slackWorkspace")) //&& inst.id =='pvckfSmmTp')
-                            promises.push(getConference(inst.get("slackWorkspace")).then((conf)=>{
-                                console.log("Finished "+ conf.get("conferenceName"))
+                            promises.push(getConference(inst.get("slackWorkspace")).then((conf) => {
+                                console.log("Finished " + conf.get("conferenceName"))
                             }).catch(err => {
                                 console.log("Unable to load data for  " + inst.get("conferenceName"))
                                 console.log(err);
@@ -2060,13 +2066,12 @@ async function runBackend(){
         }).catch((err) => {
             console.log(err);
         });
-
     }
-
     Promise.all(promises).then(() => {
         app.listen(process.env.PORT || 3001, () =>
             console.log('Express server is running on localhost:3001')
         );
     });
 }
+
 runBackend();
