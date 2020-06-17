@@ -376,6 +376,11 @@ async function getConference(teamID, teamDomain) {
             await addOrReplaceConfig(r,"TWILIO_CHAT_SERVICE_SID", newChatService.sid);
         }
 
+        let socialSpaceQ = new Parse.Query("SocialSpace");
+        socialSpaceQ.equalTo("conference", r);
+        socialSpaceQ.equalTo("name","Lobby");
+        r.lobbySocialSpace = await socialSpaceQ.first({useMasterKey: true});
+
         //Make sure that there is a record of the instance for enrollments
         let accessQ = new Parse.Query(ClowdrInstanceAccess);
         accessQ.equalTo("instance", r);
@@ -663,6 +668,11 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
     query.limit(100);
     let rooms = await query.find({sessionToken: sessionToken});
 
+    let lobbyQ = new Parse.Query("UserPresence")
+    console.log(conf.lobbySocialSpace);
+    lobbyQ.equalTo("socialSpace", conf.lobbySocialSpace);
+    let lobby = await lobbyQ.find({sessionToken: sessionToken});
+
     if (rooms.length == 0) {
         blocks.push({
             type: "section",
@@ -717,6 +727,12 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
         }
         blocks.push(block);
     }
+    const lobbyLink = await buildLink(null, null, parseUser, conf ,teamID);
+    blocks.push({type: "section",
+    text:{
+        type: "mrkdwn",
+        text: "Or, join the "+lobby.length+" users hanging out <"+lobbyLink+"|in the lobby>"
+    }});
     let msg = "If you are on mobile, please be sure to open this in a real browser (e.g. not in the embedded slack browser). We have tested support for Safari, Firefox, Chrome and Edge." + (techSupportRoom ? "Having trouble with technical issues? Come join <#"+techSupportRoom+">.":"")
     blocks.push({
         type: "section", text: {
@@ -939,7 +955,7 @@ async function buildLink(roomID, roomName, parseUser, conf, teamID) {
         roomName: roomName,
     }, process.env.CLOWDR_JWT_KEY, {expiresIn: '8h'});
 
-    link = link + '/fromSlack/' + encodeURI(teamID) + '/' + encodeURI(roomName) + '/' +
+    link = link + '/fromSlack/' + encodeURI(teamID) + '/' +
         encodeURI(token);
     return link;
 }
@@ -1835,15 +1851,22 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
     try {
         console.log("Chat token for " + identity)
         let sessionObj = await getSession(identity);
+        if(!sessionObj){
+            res.status(403);
+            res.send({status: "Invalid token"})
+            return;
+        }
         let conf = await getConference(req.body.conference);
 
-        const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET);
+        const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
+            {ttl: 3600*24});
         let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
         let name = userProfile.id;
         let sessionID = sessionObj.id;
         const chatGrant = new ChatGrant({
             serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
             endpointId: `${name}:browser:${sessionID}`
+
         });
         console.log("Lookign to add " + name + " to twilio chat")
         console.log("Service SID" + conf.config.TWILIO_CHAT_SERVICE_SID);
@@ -2034,6 +2057,11 @@ async function runBackend(){
         sidToRoom[room.get("twilioID")] = room;
     }
     var roomSubscription = parseLive.subscribe(query, sessionToken);
+    roomSubscription.on("error", (err) => {
+        console.error("Subscription error")
+        console.log(err);
+    });
+
     roomSubscription.on('create', (vid) => {
         parseRoomCache[vid.id] = vid;
     })
