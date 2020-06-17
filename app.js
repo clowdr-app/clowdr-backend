@@ -2031,12 +2031,12 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
 //     }
 // });
 
-var parseLive = new Parse.LiveQueryClient({
-    applicationId: process.env.REACT_APP_PARSE_APP_ID,
-    serverURL: process.env.REACT_APP_PARSE_DOMAIN,
-    javascriptKey: process.env.REACT_APP_PARSE_JS_KEY,
-});
-parseLive.open();
+// var parseLive = new Parse.LiveQueryClient({
+//     applicationId: process.env.REACT_APP_PARSE_APP_ID,
+//     serverURL: process.env.REACT_APP_PARSE_DOMAIN,
+//     javascriptKey: process.env.REACT_APP_PARSE_JS_KEY,
+// });
+// parseLive.open();
 
 //At boot, we should still clear out our cache locally
 async function runBackend(){
