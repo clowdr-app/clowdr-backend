@@ -131,19 +131,44 @@ async function createDefaultRoles(conferenceName){
     let adminRole = await getOrCreateRole(conf.id,"admin")
 
 }
-// if(process.argv.length != 4){
-//     console.log("Usage: node blessSlackChannelMembersWithModeratorRole <confernce name> <channelName>");
-// }
-// else{
-//     createSocialSpace(process.argv[2], process.argv[3]).then(()=>{
-//         console.log("Done");
-//     })
-// }
+const masterTwilioClient = Twilio(process.env.TWILIO_MASTER_SID, process.env.TWILIO_MASTER_AUTH_TOKEN);
+async function addOrReplaceConfig(installTo, key, value) {
+    if(!installTo.config){
+        installTo.config = {};
+    }
+    let existingTokenQ = new Parse.Query(ClowdrInstance);
+    existingTokenQ.equalTo("key", key);
+    existingTokenQ.equalTo("instance", installTo);
+    let tokenConfig = await existingTokenQ.first({}, {useMasterKey: true});
+    if (!tokenConfig) {
+        //Add the token
+        tokenConfig = new InstanceConfig();
+        tokenConfig.set("key", key);
+        tokenConfig.set("instance", installTo);
+    }
+    installTo.config[key] = value;
+    tokenConfig.set("value", value);
+    return tokenConfig.save({}, {useMasterKey: true});
+}
 
 let confQ = new Parse.Query(ClowdrInstance);
 confQ.find({useMasterKey: true}).then( async(confs)=>{
     for (let conf of confs){
-        // await createDefaultRoles(conf.get("conferenceName"));
-        // await createSocialSpaces(conf.get("conferenceName"));
+        await createDefaultRoles(conf.get("conferenceName"));
+        await createSocialSpaces(conf.get("conferenceName"));
+        //Also for debugging: force create a twilio config
+        // console.log(conf.get("conferenceName"))
+        // let account = await masterTwilioClient.api.accounts.create({friendlyName: conf.id + ": " + conf.get("conferenceName")});
+        // let newAuthToken = account.authToken;
+        // let newSID = account.sid;
+        //
+        // let tempClient = Twilio(newSID, newAuthToken);
+        // let new_key = await tempClient.newKeys.create();
+        // await addOrReplaceConfig(conf, "TWILIO_API_KEY", new_key.sid);
+        // await addOrReplaceConfig(conf, "TWILIO_API_SECRET", new_key.secret);
+        // await addOrReplaceConfig(conf, "TWILIO_ACCOUNT_SID", newSID);
+        // await addOrReplaceConfig(conf, "TWILIO_AUTH_TOKEN", newAuthToken);
+        // await addOrReplaceConfig(conf, "TWILIO_ROOM_TYPE", "peer-to-peer")
+        // console.log("done")
     }
 })
