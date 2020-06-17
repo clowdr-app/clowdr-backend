@@ -632,7 +632,7 @@ async function getConfig(conf) {
 }
 
 var userIDToSession = {};
-var parseRoomCache = {};
+// var parseRoomCache = {};
 async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) {
 
     let sessionToken = userIDToSession[parseUser.id];
@@ -2056,24 +2056,24 @@ async function runBackend(){
     query.limit(100);
     let rooms = await query.find({useMasterKey: true});
     for(let room of rooms){
-        parseRoomCache[room.id] = room;
+        // parseRoomCache[room.id] = room;
         sidToRoom[room.get("twilioID")] = room;
     }
-    var roomSubscription = parseLive.subscribe(query, sessionToken);
-    roomSubscription.on("error", (err) => {
-        console.error("Subscription error")
-        console.log(err);
-    });
-
-    roomSubscription.on('create', (vid) => {
-        parseRoomCache[vid.id] = vid;
-    })
-    roomSubscription.on("delete", vid => {
-        parseRoomCache[vid.id] = undefined;
-    });
-    roomSubscription.on('update', (newItem) => {
-        parseRoomCache[vid.id] = newItem;
-    });
+    // var roomSubscription = parseLive.subscribe(query, sessionToken);
+    // roomSubscription.on("error", (err) => {
+    //     console.error("Subscription error")
+    //     console.log(err);
+    // });
+    //
+    // roomSubscription.on('create', (vid) => {
+    //     parseRoomCache[vid.id] = vid;
+    // })
+    // roomSubscription.on("delete", vid => {
+    //     parseRoomCache[vid.id] = undefined;
+    // });
+    // roomSubscription.on('update', (newItem) => {
+    //     parseRoomCache[vid.id] = newItem;
+    // });
 
 
     if (!process.env.SKIP_INIT) {
