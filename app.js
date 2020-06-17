@@ -1241,6 +1241,7 @@ async function slackSlashCommand(req, res, next) {
 
 async function processTwilioEvent(req, res) {
     let roomSID = req.body.RoomSid;
+    console.log("Twilio event: "+ req.body.StatusCallbackEvent + " " + req.body.RoomSid)
     try {
         // let room = sidToRoom[roomSID];
         if (req.body.StatusCallbackEvent == 'participant-connected') {
@@ -1260,7 +1261,6 @@ async function processTwilioEvent(req, res) {
             }
             await room.save({}, {useMasterKey: true});
 
-
             // let newUser = await roomsRef.child(req.body.RoomName).child("members").child(uid).set(true);
             // console.log("Added " + req.body.ParticipantIdentity + " to " + roomDBID + " count is now " + membersCache[roomDBID]);
             // ;
@@ -1278,6 +1278,7 @@ async function processTwilioEvent(req, res) {
                 room.set("members", room.get("members").filter((u) => u.id != uid));
             }
             await room.save({}, {useMasterKey: true});
+
             // } else if(req.body.StatusCallbackEvent == '')
         } else if (req.body.StatusCallbackEvent == 'room-ended') {
             let roomQ = new Parse.Query(BreakoutRoom);
@@ -1309,6 +1310,8 @@ async function processTwilioEvent(req, res) {
         // next(err);
 
     }
+    console.log("DONE Twilio event: "+ req.body.StatusCallbackEvent + " " + req.body.RoomSid)
+
     res.send();
 }
 
