@@ -1242,15 +1242,13 @@ async function slackSlashCommand(req, res, next) {
 async function processTwilioEvent(req, res) {
     let roomSID = req.body.RoomSid;
     try {
-        let room = sidToRoom[roomSID];
+        // let room = sidToRoom[roomSID];
         if (req.body.StatusCallbackEvent == 'participant-connected') {
-            if(!room)
-            {
-                //Race
-                let roomQ = new Parse.Query(BreakoutRoom);
-                roomQ.equalTo("twilioID", roomSID);
-                room = await roomQ.first({useMasterKey: true});
-            }
+
+            let roomQ = new Parse.Query(BreakoutRoom);
+            roomQ.equalTo("twilioID", roomSID);
+            let room = await roomQ.first({useMasterKey: true});
+
             let uid = req.body.ParticipantIdentity;
             let userFindQ = new Parse.Query(UserProfile);
             let user = await userFindQ.get(uid, {useMasterKey: true});
@@ -1268,6 +1266,10 @@ async function processTwilioEvent(req, res) {
             // ;
             // membersCache[req.body.RoomName]++;
         } else if (req.body.StatusCallbackEvent == 'participant-disconnected') {
+            let roomQ = new Parse.Query(BreakoutRoom);
+            roomQ.equalTo("twilioID", roomSID);
+            let room = await roomQ.first({useMasterKey: true});
+
             let uid = req.body.ParticipantIdentity;
             let userFindQ = new Parse.Query(User);
             if (!room.get("members")) {
@@ -1278,6 +1280,9 @@ async function processTwilioEvent(req, res) {
             await room.save({}, {useMasterKey: true});
             // } else if(req.body.StatusCallbackEvent == '')
         } else if (req.body.StatusCallbackEvent == 'room-ended') {
+            let roomQ = new Parse.Query(BreakoutRoom);
+            roomQ.equalTo("twilioID", roomSID);
+            let room = await roomQ.first({useMasterKey: true});
             if (room) {
                 if (room.get("persistence") == "persistent") {
                     console.log("Removing tid " + room.get("title"))
