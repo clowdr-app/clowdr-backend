@@ -2053,7 +2053,7 @@ async function runBackend(){
     sessionToken = sessionToken.get("sessionToken");
 
     let query = new Parse.Query("BreakoutRoom");
-    query.limit(1000);
+    query.limit(100);
     let rooms = await query.find({useMasterKey: true});
     for(let room of rooms){
         parseRoomCache[room.id] = room;
