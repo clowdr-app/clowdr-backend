@@ -126,7 +126,6 @@ async function getOrCreateRole(confID, priv) {
             newrole.getRoles().add(adminRole);
             try {
                 newrole = await newrole.save({}, {useMasterKey: true});
-                console.log(newrole);
             } catch (err) {
                 console.log("Did not actually create it:")
                 console.log(err);
@@ -389,7 +388,6 @@ async function getConference(teamID, teamDomain) {
             accessRecord = new ClowdrInstanceAccess();
             let role = await getOrCreateRole(r.id, "conference");
             let acl = new Parse.ACL();
-            console.log(role);
             try {
                 acl.setRoleReadAccess(r.id + "-conference", true);
                 accessRecord.set("instance", r);
@@ -433,10 +431,8 @@ async function getConference(teamID, teamDomain) {
             try {
                 if (!parseRoom.get("twilioID") && parseRoom.get("persistence") != "ephemeral")
                     continue; //persistent room, not occupied.
-                console.log(parseRoom.get("title"))
                 let found = roomsInTwilio.filter((i) => i.status == 'in-progress' && i.sid == parseRoom.get("twilioID"));
                 if (found.length == 1 && found[0].status == 'in-progress') {
-                    console.log("Found in twilio")
                     sidToRoom[parseRoom.get("twilioID")] = parseRoom;
                     //sync members
                     let participants = await r.twilio.video.rooms(parseRoom.get("twilioID")).participants.list();
@@ -523,7 +519,6 @@ async function getConference(teamID, teamDomain) {
         promises.push(
             chatService.channels("#general").fetch().then((chan)=>{
                 if(!chan.sid){
-                    console.log("Creating a new one")
                     return chatService.channels.create({uniqueName: "#general", friendlyName: "#general", type: "public"}).catch(err=>{});
                 }
 
@@ -669,7 +664,6 @@ async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) 
     let rooms = await query.find({sessionToken: sessionToken});
 
     let lobbyQ = new Parse.Query("UserPresence")
-    console.log(conf.lobbySocialSpace);
     lobbyQ.equalTo("socialSpace", conf.lobbySocialSpace);
     let lobby = await lobbyQ.find({sessionToken: sessionToken});
 
@@ -1860,7 +1854,6 @@ app.post("/slack/login", bodyParser.json(), bodyParser.urlencoded({extended: fal
 app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
     const identity = req.body.identity;
     try {
-        console.log("Chat token for " + identity)
         let sessionObj = await getSession(identity);
         if(!sessionObj){
             res.status(403);
@@ -1879,8 +1872,6 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
             endpointId: `${name}:browser:${sessionID}`
 
         });
-        console.log("Lookign to add " + name + " to twilio chat")
-        console.log("Service SID" + conf.config.TWILIO_CHAT_SERVICE_SID);
         accessToken.addGrant(chatGrant);
         accessToken.identity = name;
         res.set('Content-Type', 'application/json');
@@ -1889,7 +1880,6 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
             identity: name
         }));
 
-        console.log("Sent response");
     } catch (err) {
         next(err);
     }
@@ -1902,7 +1892,6 @@ app.post('/chat/deleteMessage',bodyParser.json(), bodyParser.urlencoded({extende
     const identity = req.body.identity;
     const messageSID = req.body.message;
     const channelSID = req.body.room;
-    console.log(req.body)
     let conf = await getConference(req.body.conference);
     try {
         const accesToConf = new Parse.Query(InstancePermission);
@@ -1915,7 +1904,6 @@ app.post('/chat/deleteMessage',bodyParser.json(), bodyParser.urlencoded({extende
             return;
         }
         let chat = await conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).channels(channelSID).messages(messageSID).remove();
-        console.log(chat)
         res.send({status: "OK"});
     } catch (err) {
         next(err);
@@ -1928,7 +1916,6 @@ app.post('/chat/deleteMessage',bodyParser.json(), bodyParser.urlencoded({extende
 app.post('/video/deleteRoom',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
     const identity = req.body.identity;
     const roomID = req.body.room;
-    console.log('"'+roomID+"'");
     let conf = await getConference(req.body.conference);
     try {
         const accesToConf = new Parse.Query(InstancePermission);
