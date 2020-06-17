@@ -1312,6 +1312,9 @@ app.post("/twilio/event", bodyParser.json(), bodyParser.urlencoded({extended: fa
 })
 
 async function addOrReplaceConfig(installTo, key, value) {
+    if(!installTo.config){
+        installTo.config = {};
+    }
     let existingTokenQ = new Parse.Query(ClowdrInstance);
     existingTokenQ.equalTo("key", key);
     existingTokenQ.equalTo("instance", installTo);
