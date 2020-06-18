@@ -627,7 +627,7 @@ async function getConfig(conf) {
 }
 
 var userIDToSession = {};
-// var parseRoomCache = {};
+var parseRoomCache = {};
 async function pushActiveCallsFromConfToBlocks(conf, blocks, parseUser, teamID) {
 
     let sessionToken = userIDToSession[parseUser.id];
@@ -1192,7 +1192,46 @@ async function slackSlashCommand(req, res, next) {
     if(req.body.command == "/gather"){
         if(conf.config.GATHER_LINK)
         {
-            sendMessageWithLinkToUser(req.body.response_url,"Join the virtual space in Gather at "+conf.config.GATHER_LINK + " Please note that Gather supports only Firefox and Chrome", conf);
+            const message = {
+                "text": "Join the virtual space in Gather: "+conf.config.GATHER_LINK + ". Please note that Gather supports only Firefox and Chrome",
+                "response_type": "ephemeral",
+                // Block Kit Builder - http://j.mp/bolt-starter-msg-json
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "Join the virtual space in Gather: "+conf.config.GATHER_LINK + ". Please note that Gather supports only Firefox and Chrome",
+                        }
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "Gather has multiple maps that you can explore, like this entrance area and beach."
+                        },
+                        "accessory": {
+                            "type": "image",
+                            "image_url": "https://www.doc.ic.ac.uk/~afd/pldi-beach-minimap.jpg",
+                            "alt_text": "Gather map"
+                        }
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": "The virtual poster session and sponsor booths also have their own room in Gather."
+                        },
+                        "accessory": {
+                            "type": "image",
+                            "image_url": "https://www.doc.ic.ac.uk/~afd/pldi-minimap.jpg",
+                            "alt_text": "Another Gather map"
+                        }
+                    }
+                ],
+            };
+            return axios.post(req.body.response_url, message);
+            // sendMessageWithLinkToUser(req.body.response_url,"Join the virtual space in Gather: "+conf.config.GATHER_LINK + ". Please note that Gather supports only Firefox and Chrome", conf);
         }
         else{
             sendMessageWithLinkToUser(req.body.response_url,"This feature is not enabled on this slack workspace.", conf);
@@ -1201,6 +1240,8 @@ async function slackSlashCommand(req, res, next) {
     }
     if(req.body.command === "/videodebug"){
         req.body.command = "/video";
+        return;
+
     }
     if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoprivate' || req.body.command == "/videolist") {
         res.send();
@@ -2032,7 +2073,10 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
 //     javascriptKey: process.env.REACT_APP_PARSE_JS_KEY,
 // });
 // parseLive.open();
-
+// parseLive.on("error", (err) => {
+//     console.error("Subscription error")
+//     console.log(err);
+// });
 //At boot, we should still clear out our cache locally
 async function runBackend(){
     let promises = [];
@@ -2051,7 +2095,7 @@ async function runBackend(){
     query.limit(100);
     let rooms = await query.find({useMasterKey: true});
     for(let room of rooms){
-        // parseRoomCache[room.id] = room;
+        parseRoomCache[room.id] = room;
         sidToRoom[room.get("twilioID")] = room;
     }
     // var roomSubscription = parseLive.subscribe(query, sessionToken);
@@ -2059,7 +2103,7 @@ async function runBackend(){
     //     console.error("Subscription error")
     //     console.log(err);
     // });
-    //
+
     // roomSubscription.on('create', (vid) => {
     //     parseRoomCache[vid.id] = vid;
     // })
