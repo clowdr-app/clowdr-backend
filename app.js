@@ -1208,7 +1208,7 @@ async function slackSlashCommand(req, res, next) {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": "Gather has multiple maps that you can explore, like this entrance area and beach."
+                            "text": "Gather has multiple maps that you can explore, <https://www.doc.ic.ac.uk/~afd/pldi-beach-minimap.jpg|like this entrance area and beach>."
                         },
                         "accessory": {
                             "type": "image",
@@ -1220,7 +1220,7 @@ async function slackSlashCommand(req, res, next) {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": "The virtual poster session and sponsor booths also have their own room in Gather."
+                            "text": "The <https://www.doc.ic.ac.uk/~afd/pldi-minimap.jpg|virtual poster session and sponsor booths> also have their own room in Gather."
                         },
                         "accessory": {
                             "type": "image",
@@ -1240,7 +1240,8 @@ async function slackSlashCommand(req, res, next) {
     }
     if(req.body.command === "/videodebug"){
         req.body.command = "/video";
-        return;
+        // return;
+
 
     }
     if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoprivate' || req.body.command == "/videolist") {
