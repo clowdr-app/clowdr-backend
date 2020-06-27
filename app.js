@@ -1372,6 +1372,10 @@ app.post("/twilio/chat/event", bodyParser.json(), bodyParser.urlencoded({extende
             let isOnline = req.body.IsOnline;
             let uid = req.body.Identity;
             let presence = await getUserPresence(uid);
+            if(!presence){
+                presenceCache[uid] = undefined;
+                return;
+            }
             presence.set("isOnline", isOnline == 'true');
             presence.save({}, {useMasterKey: true});
         }
