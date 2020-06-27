@@ -1365,16 +1365,27 @@ function getUserPresence(profileID) {
 }
 
 app.post("/twilio/chat/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
-    if(req.body.EventType == "onUserUpdated"){
-        let isOnline = req.body.IsOnline;
-        let uid = req.body.Identity;
-        let presence = await getUserPresence(uid);
-        presence.set("isOnline", isOnline=='true');
-        presence.save({},{useMasterKey: true});
+    res.send();
+    try {
+
+        if (req.body.EventType == "onUserUpdated") {
+            let isOnline = req.body.IsOnline;
+            let uid = req.body.Identity;
+            let presence = await getUserPresence(uid);
+            presence.set("isOnline", isOnline == 'true');
+            presence.save({}, {useMasterKey: true});
+        }
+    }catch(err){
+        console.log(err);
     }
 })
 app.post("/twilio/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
-    await processTwilioEvent(req, res);
+    res.send();
+    try {
+        await processTwilioEvent(req, res);
+    }catch (e) {
+        console.log(e);
+    }
 })
 
 async function addOrReplaceConfig(installTo, key, value) {
