@@ -1351,6 +1351,28 @@ async function processTwilioEvent(req, res) {
     res.send();
 }
 
+var presenceCache = {};
+
+function getUserPresence(profileID) {
+    if (!presenceCache[profileID]) {
+        let presenceQ = new Parse.Query("UserPresence");
+        let prof = new UserProfile();
+        prof.id = profileID;
+        presenceQ.equalTo("user", prof);
+        presenceCache[profileID] = presenceQ.first({useMasterKey: true});
+    }
+    return presenceCache[profileID];
+}
+
+app.post("/twilio/chat/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
+    if(req.body.EventType == "onUserUpdated"){
+        let isOnline = req.body.IsOnline;
+        let uid = req.body.Identity;
+        let presence = await getUserPresence(uid);
+        presence.set("isOnline", isOnline=='true');
+        presence.save({},{useMasterKey: true});
+    }
+})
 app.post("/twilio/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     await processTwilioEvent(req, res);
 })
