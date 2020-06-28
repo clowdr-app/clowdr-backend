@@ -148,13 +148,16 @@ var parseUIDToProfiles;
 
 slackEvents.on('team_join', async (event) => {
     let conf = await getConference(event.user.team_id, "unknown");
-    const parseUser = await getOrCreateParseUser(event.user.id, conf, conf.config.slackClient);
-
-    console.log("Created parse user: " + parseUser.get("displayname") + " in " + conf.get("conferenceName"));
+    if(conf.config.LOGIN_FROM_SLACK) {
+        const parseUser = await getOrCreateParseUser(event.user.id, conf, conf.config.slackClient);
+        console.log("Created parse user: " + parseUser.get("displayname") + " in " + conf.get("conferenceName"));
+    }
 });
 
 slackEvents.on('user_change', async (event) => {
     let conf = await getConference(event.user.team_id, "unknown");
+    if(!conf.config.LOGIN_FROM_SLACK)
+        return;
     let q = new Parse.Query(UserProfile);
     q.equalTo("slackID", event.user.id);
     q.equalTo("conference", conf);
@@ -618,6 +621,13 @@ async function getConfig(conf) {
     }
     if (!config.AUTO_CREATE_USER) {
         config.AUTO_CREATE_USER = true;
+    }
+    if(config.LOGIN_FROM_SLACK == "false")
+    {
+        config.LOGIN_FROM_SLACK = false;
+    }
+    else{
+        config.LOGIN_FROM_SLACK = true;
     }
     // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event";
     config.slackClient = new WebClient(config.SLACK_BOT_TOKEN);
@@ -1246,6 +1256,10 @@ async function slackSlashCommand(req, res, next) {
     }
     if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoprivate' || req.body.command == "/videolist") {
         res.send();
+        if(!conf.config.LOGIN_FROM_SLACK){
+            respondWithError(body.response_url, "Access video by logging in at " + conf.config.FRONTEND_URL);
+            return;
+        }
 
         try {
             if (req.body.text) {
