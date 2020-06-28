@@ -1257,7 +1257,7 @@ async function slackSlashCommand(req, res, next) {
     if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoprivate' || req.body.command == "/videolist") {
         res.send();
         if(!conf.config.LOGIN_FROM_SLACK){
-            respondWithError(body.response_url, "Access video by logging in at " + conf.config.FRONTEND_URL);
+            respondWithError(req.body.response_url, "Access video by logging in at " + conf.config.FRONTEND_URL);
             return;
         }
 
