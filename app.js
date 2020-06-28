@@ -1256,8 +1256,14 @@ async function slackSlashCommand(req, res, next) {
     }
     if (req.body.command === '/video_t' || req.body.command === '/video' || req.body.command === '/videoprivate' || req.body.command == "/videolist") {
         res.send();
-        if(!conf.config.LOGIN_FROM_SLACK){
-            respondWithError(req.body.response_url, "Access video by logging in at " + conf.config.FRONTEND_URL);
+        if (!conf.config.LOGIN_FROM_SLACK) {
+            let message = {
+                    "text:": "Access video by logging in at " + conf.config.FRONTEND_URL,
+                    "response_type": "ephemeral"
+                }
+            ;
+            return axios.post(req.body.response_url, message
+            ).catch(console.error);
             return;
         }
 
