@@ -80,6 +80,7 @@ const sendTokenResponse = (token, roomName, res) => {
 };
 let membersCache = {};
 let Room = Parse.Object.extend("BreakoutRoom");
+let SocialSpace = Parse.Object.extend("SocialSpace");
 let User = Parse.Object.extend("User");
 
 async function populateActiveChannels(conf) {
@@ -1507,6 +1508,7 @@ async function createNewRoom(req, res){
     let category = req.body.category //TODO
     let mode = req.body.mode;
     let persistence = req.body.persistence;
+    let socialSpaceID = req.body.socialSpace;
     if (!mode)
         mode = "group-small";
     if (!persistence)
@@ -1559,6 +1561,11 @@ async function createNewRoom(req, res){
                     parseRoom.set("mode", mode);
                     parseRoom.set("capacity", maxParticipants);
                     parseRoom.set("twilioChatID", twilioChatRoom.sid);
+                    if(socialSpaceID){
+                        let socialSpace  =new SocialSpace();
+                        socialSpace.id = socialSpaceID;
+                        parseRoom.set("socialSpace", socialSpace);
+                    }
                     let modRole = await getOrCreateRole(conf.id,"moderator");
 
                     let acl = new Parse.ACL();
