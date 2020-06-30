@@ -54,6 +54,8 @@ var InstancePermission = Parse.Object.extend("InstancePermission");
 let LiveActivity = Parse.Object.extend("LiveActivity");
 let Channel = Parse.Object.extend("Channel");
 let UserProfile = Parse.Object.extend("UserProfile");
+let BondedChannel = Parse.Object.extend("BondedChannel");
+let TwilioChannelMirror = Parse.Object.extend("TwilioChannelMirror");
 
 
 function generateRandomString(length) {
@@ -1398,6 +1400,40 @@ app.post("/twilio/chat/event", bodyParser.json(), bodyParser.urlencoded({extende
         console.log(err);
     }
 })
+app.post("/twilio/bondedChannel/:masterChannelID/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
+    res.send();
+    try {
+        if(req.body.EventType == "onMessageSent"){
+            //Re-broadcast this message to all of the channels bonded together
+            console.log("Pushing message to bonded channels for " + req.params.masterChannelID)
+            let allChannels = [];
+            let bondQ = new Parse.Query(BondedChannel);
+            bondQ.include("conference");
+            let masterChan = await bondQ.get(req.params.masterChannelID, {useMasterKey:true});
+            let childrenRelation = masterChan.relation("children");
+            let childrenQ = childrenRelation.query();
+            let mirrorChan = await childrenQ.find({useMasterKey: true});
+            allChannels = mirrorChan.map(c => c.get("sid"));
+            allChannels.push(masterChan.get("masterSID"));
+            allChannels = allChannels.filter(c=>c!=req.body.ChannelSid);
+            let conf = await getConference(masterChan.get("conference").get("slackWorkspace"));
+            for(let chan of allChannels){
+                conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).
+                    channels(chan).messages.create({
+                   from: req.body.From,
+                   attributes: req.body.Attributes,
+                   body: req.body.Body,
+                   mediaSid: req.body.MediaSid
+                });
+            }
+
+        }
+
+    }catch(err){
+        console.log(err);
+    }
+})
+
 app.post("/twilio/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     res.send();
     try {
