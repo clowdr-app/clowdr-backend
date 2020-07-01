@@ -1629,8 +1629,7 @@ async function createNewRoom(req, res){
                     parseRoom.setACL(acl, {useMasterKey: true});
                     await parseRoom.save({}, {useMasterKey: true});
                     let attributes = {
-                        category: "userCreated",
-                        mode: "breakoutRoom",
+                        category: "breakoutRoom",
                         roomID: parseRoom.id
                     }
 
