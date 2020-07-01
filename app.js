@@ -1582,11 +1582,8 @@ async function createNewRoom(req, res){
                     //Create a chat room too
 
                     let chat = twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
-                    let twilioChatRoom = await chat.channels.create({
-                        friendlyName: roomName,
-                        type:
-                            (visibility == "unlisted" ? "private" : "public")
-                    });
+
+
                     //Create a new room in the DB
                     let parseRoom = new BreakoutRoom();
                     parseRoom.set("title", roomName);
@@ -1596,7 +1593,6 @@ async function createNewRoom(req, res){
                     parseRoom.set("persistence", persistence);
                     parseRoom.set("mode", mode);
                     parseRoom.set("capacity", maxParticipants);
-                    parseRoom.set("twilioChatID", twilioChatRoom.sid);
                     if(socialSpaceID){
                         let socialSpace  =new SocialSpace();
                         socialSpace.id = socialSpaceID;
@@ -1632,6 +1628,20 @@ async function createNewRoom(req, res){
                     }
                     parseRoom.setACL(acl, {useMasterKey: true});
                     await parseRoom.save({}, {useMasterKey: true});
+                    let attributes = {
+                        category: "userCreated",
+                        mode: "breakoutRoom",
+                        roomID: parseRoom.id
+                    }
+
+                    let twilioChatRoom = await chat.channels.create({
+                        friendlyName: roomName,
+                        attributes: JSON.stringify(attributes),
+                        type:
+                            (visibility == "unlisted" ? "private" : "public")
+                    });
+                    parseRoom.set("twilioChatID", twilioChatRoom.sid);
+                    await parseRoom.save({},{useMasterKey: true});
                     sidToRoom[twilioRoom.sid] = parseRoom;
                     conf.rooms.push(parseRoom);
                     return res.send({status: "OK"});
