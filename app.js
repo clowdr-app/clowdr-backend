@@ -1345,10 +1345,10 @@ async function processTwilioEvent(req, res) {
                 } else {
                     if(room.get("twilioChatID")){
                         //get the twilio client for this room to delete the chat room
-                        let confID = room.get("conference").id
-                        let conf = await getConferenceByParseID(confID);
-                        await conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).
-                        channels(room.get("twilioChatID")).remove();
+                        // let confID = room.get("conference").id
+                        // let conf = await getConferenceByParseID(confID);
+                        // await conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).
+                        // channels(room.get("twilioChatID")).remove();
                     }
                     await room.destroy({useMasterKey: true});
                 }
