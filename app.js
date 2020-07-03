@@ -1750,6 +1750,7 @@ async function updateACL(req,res){
         let parseUser = parseSession.get("user");
         //Check for roles...
         let roomQ = new Parse.Query("BreakoutRoom");
+        roomQ.include("conversation");
         let room = await roomQ.get(roomID, {sessionToken: identity});
         if (!room) {
             return res.send({status: 'error', message: "No such room"});
@@ -1776,7 +1777,10 @@ async function updateACL(req,res){
         }
         for (let user of users) {
             if (!usersWithAccessCurrently.includes(user)) {
-                room.getACL().setReadAccess(user,true);
+
+                if(room.get("conversation"))
+                    room.get("conversation").getACL().setReadAccess(user, true);
+                room.getACL().setReadAccess(user, true);
                 let userProfile = await getUserProfile(user, conf);
                 promises.push(chat.channels(room.get("twilioChatID")).members.create({identity: userProfile.id}));
                 let fauxUser = new Parse.User();
@@ -1784,9 +1788,12 @@ async function updateACL(req,res){
                 usersToRefresh.push(fauxUser);
             }
         }
-        if(users.length == 0){
+        if (room.get("conversation")) {
+            await room.get("conversation").save({}, {useMasterKey: true});
+        }
+        if (users.length == 0) {
             await room.destroy({useMasterKey: true});
-        }else {
+        } else {
             await room.save({}, {useMasterKey: true});
         }
         await Promise.all(promises);
@@ -2076,6 +2083,9 @@ app.post('/video/deleteRoom',bodyParser.json(), bodyParser.urlencoded({extended:
         //First, remove all users.
         let roomQ = new Parse.Query(BreakoutRoom);
         let room = await roomQ.get(roomID, {useMasterKey: true});
+        if(!room){
+            console.log("Unable to find room:" + roomID)
+        }
         let promises = [];
         for(let member of room.get("members")){
             console.log("Kick: " + member.id);
