@@ -112,6 +112,7 @@ async function getOrCreateRole(confID, priv) {
     //     confID = confID.id;
     // }
     let name = confID + "-" + priv;
+    console.log("Get or create role: " + name)
     // if (roleCache[name]){
     //     return roleCache[name];
     // }
@@ -858,7 +859,7 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
             profile.setACL(profileACL);
 
             await profile.save({}, {useMasterKey: true});
-            await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
+            await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf.id, "conference"));
             u.get("profiles").add(profile);
             await u.save({}, {useMasterKey: true});
             return u;
@@ -1485,7 +1486,7 @@ app.get("/slack/auth", async (req, res) => {
             installTo = new ClowdrInstance();
             installTo.set("slackWorkspace", resp.data.team.id);
             installTo.set("conferenceName", resp.data.team.name)
-            await installTo.save();
+            await installTo.save({},{useMasterKey: true});
             //create the sub account
             let account = await masterTwilioClient.api.accounts.create({friendlyName: installTo.id + ": " + resp.data.team.name});
             let newAuthToken = account.authToken;
