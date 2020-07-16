@@ -18,6 +18,13 @@ cp .env.example .env
 |`TWILIO_API_SECRET` | [Used to authenticate](https://www.twilio.com/console/dev-tools/api-keys).|
 |`TWILIO_CHAT_SERVICE_SID` | [Chat](https://www.twilio.com/console/chat/services)|
 
+### Enable chat webhooks for twilio
+We use a webhook from twilio to track who is online.
+From your Twilio programmable chat service dashboard:
+* Base configuration -> Enable reachability, message read status
+* Webhooks -> Post event webhook, callback URL is your backend server e.g. https://back.clowdr.org/twilio/chat/event , HTTP-POST method, `onUserUpdated` event only.
+* Save
+
 ### Configure Parse account info
 
 In the same `.env`, you should configure Parse info based on this [instruction](https://github.com/clowdr-app/clowdr-web-app/blob/master/README.md).
