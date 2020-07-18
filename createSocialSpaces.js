@@ -68,8 +68,8 @@ async function getConferenceByName(confName){
 
 var globalSocialSpaces =[
     "Lobby",
-    "Posters",
-    "Breakout Rooms"
+    // "Posters",
+    // "Breakout Rooms"
 ];
 async function createSocialSpaces(confName){
     let conf = await getConferenceByName(confName);
@@ -96,16 +96,27 @@ async function createSocialSpaces(confName){
             let chat = conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
             let twilioChatRoom = await chat.channels.create({
                 friendlyName: spaceName,
+                uniqueName: "socialSpace-" + space.id,
                 type: "public",
-                attributes: {
-                    type: "SocialSpace",
+                attributes: JSON.stringify({
+                    category: "socialSpace",
                     isGlobal: true,
-                    id: space.id
-                }
+                    spaceID: space.id
+                })
             });
             space.set("chatChannel", twilioChatRoom.sid);
 
             await space.save({}, {useMasterKey: true})
+        }else{
+            let chat = conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
+            let twilioChatRoom = await chat.channels(space.get("chatChannel")).update({
+                friendlyName: spaceName,
+                attributes: JSON.stringify({
+                    category: "socialSpace",
+                    isGlobal: true,
+                    spaceID: space.id
+                })
+            });
         }
     }
 
@@ -154,7 +165,7 @@ async function addOrReplaceConfig(installTo, key, value) {
 let confQ = new Parse.Query(ClowdrInstance);
 confQ.find({useMasterKey: true}).then( async(confs)=>{
     for (let conf of confs){
-        await createDefaultRoles(conf.get("conferenceName"));
+        // await createDefaultRoles(conf.get("conferenceName"));
         await createSocialSpaces(conf.get("conferenceName"));
         //Also for debugging: force create a twilio config
         // console.log(conf.get("conferenceName"))
