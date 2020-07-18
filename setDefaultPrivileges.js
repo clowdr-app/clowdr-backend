@@ -14,7 +14,9 @@ var privilegeRoles = {
     "createVideoRoom-smallgroup": null,
     "createVideoRoom-peer-to-peer": null,
     'createVideoRoom-private': null,
-    "moderator": null
+    "moderator": null,
+    'announcement-global': null
+
 };
 let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
 let InstancePermission = Parse.Object.extend("InstancePermission");
@@ -39,16 +41,16 @@ async function createPrivileges() {
             if (!res) {
                 let pa = new PrivilegedAction();
                 pa.set("action", action);
-                // let roleACL = new Parse.ACL();
-                // roleACL.setPublicReadAccess(true);
-                // roleACL.setRoleWriteAccess(await getParseAdminRole(), true);
-                // let prole = new Parse.Role("action-" + action, roleACL);
-                // await prole.save({}, {useMasterKey: true});
-                // pa.set("role", prole);
-                // let actionACL = new Parse.ACL();
-                // actionACL.setPublicReadAccess(false);
-                // actionACL.setRoleReadAccess(prole, true);
-                // pa.setACL(actionACL);
+                let roleACL = new Parse.ACL();
+                roleACL.setPublicReadAccess(true);
+                roleACL.setRoleWriteAccess(await getParseAdminRole(), true);
+                let prole = new Parse.Role("action-" + action, roleACL);
+                await prole.save({}, {useMasterKey: true});
+                pa.set("role", prole);
+                let actionACL = new Parse.ACL();
+                actionACL.setPublicReadAccess(false);
+                actionACL.setRoleReadAccess(prole, true);
+                pa.setACL(actionACL);
                 res = await pa.save({}, {useMasterKey: true});
             }
             privilegeRoles[action] = res;
