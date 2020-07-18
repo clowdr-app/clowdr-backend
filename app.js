@@ -12,8 +12,8 @@ var jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 
-const slackEvents = createEventAdapter(process.env.SLACK_SIGNING_SECRET);
-const slackInteractions = createMessageAdapter(process.env.SLACK_SIGNING_SECRET);
+const slackEvents = createEventAdapter(process.env.SLACK_SIGNING_SECRET ? process.env.SLACK_SIGNING_SECRET : "");
+const slackInteractions = createMessageAdapter(process.env.SLACK_SIGNING_SECRET ? process.env.SLACK_SIGNING_SECRET : "");
 
 const {videoToken, ChatGrant, AccessToken} = require('./tokens');
 const axios = require('axios');
@@ -28,7 +28,8 @@ Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE
 Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
 
 
-const masterTwilioClient = Twilio(process.env.TWILIO_MASTER_SID, process.env.TWILIO_MASTER_AUTH_TOKEN);
+const masterTwilioClient = Twilio(process.env.TWILIO_MASTER_SID ? process.env.TWILIO_MASTER_SID : "AC123", 
+                                  process.env.TWILIO_MASTER_AUTH_TOKEN ? process.env.TWILIO_MASTER_AUTH_TOKEN : "123");
 
 
 const app = express();
@@ -805,34 +806,6 @@ async function ensureUserHasTeamRole(user, conf, role) {
         console.log("Error in role")
         console.log(err);
     }
-}
-
-var privilegeRoles = {
-    "createVideoRoom": null,
-    "chat": null,
-    "access-from-slack": null,
-    "createVideoRoom-persistent": null,
-    "createVideoRoom-group": null,
-    "createVideoRoom-smallgroup": null,
-    "createVideoRoom-peer-to-peer": null,
-    'createVideoRoom-private': null,
-    "moderator": null
-};
-
-async function createPrivileges() {
-    return Promise.all(Object.keys(privilegeRoles).map(async (action) => {
-            let actionsQ = new Parse.Query(PrivilegedAction);
-            actionsQ.equalTo("action", action)
-            actionsQ.include("role");
-            let res = await actionsQ.first({useMasterKey: true});
-            if (!res) {
-                let pa = new PrivilegedAction();
-                pa.set("action", action);
-                res = await pa.save({}, {useMasterKey: true});
-            }
-            privilegeRoles[action] = res;
-        }
-    ));
 }
 
 async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
@@ -2227,7 +2200,6 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
 //At boot, we should still clear out our cache locally
 async function runBackend() {
     let promises = [];
-    await createPrivileges();
 
     let query = new Parse.Query("BreakoutRoom");
     query.limit(100);
