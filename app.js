@@ -1481,6 +1481,15 @@ async function addOrReplaceConfig(installTo, key, value) {
     }
     installTo.config[key] = value;
     tokenConfig.set("value", value);
+    let adminRole = await getOrCreateRole(installTo.id, "admin");
+
+    let acl = new Parse.ACL();
+    acl.setPublicReadAccess(false);
+    acl.setPublicWriteAccess(false);
+    acl.setRoleReadAccess(adminRole, true);
+    acl.setRoleWriteAccess(adminRole, true);
+    tokenConfig.setACL(acl, {useMasterKey: true});
+
     return tokenConfig.save({}, {useMasterKey: true});
 }
 
