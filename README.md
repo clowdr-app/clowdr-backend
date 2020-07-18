@@ -1,5 +1,5 @@
 # clowdr-backend
-Slack bot and REST services for clowdr
+Token server, Slack bot, REST services for Clowdr
 
 ## Set up the environment variables 
 
