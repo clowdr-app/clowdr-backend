@@ -352,8 +352,21 @@ console.log(e);
     }
 }
 
+
+async function getConferenceByParseID(confID){
+    if(confIDToConf[confID])
+        return confIDToConf[confID];
+    let q = new Parse.Query(ClowdrInstance);
+    let conf = await q.get(confID, {useMasterKey: true});
+
+    initChatRooms(conf);
+    confIDToConf[conf.id] = conf;
+
+    return conf;
+}
+
 async function getConference(teamID, teamDomain) {
-    if(!teamID)
+    if (!teamID)
         return;
     try {
         if (confCache[teamID])
@@ -365,16 +378,30 @@ async function getConference(teamID, teamDomain) {
             q.equalTo("slackWorkspace", teamID);
             r = await q.first();
         } catch (err) {
-            console.log(err);
+            console.log('[getConference]: err: ' + err);
         }
         // } catch (err) {
         if (!r) {
             console.log("Unable to find workspace in ClowdrDB: " + teamID + ", " + teamDomain);
         }
+
+        initChatRooms(r);
+
+        confCache[teamID] = r;
+        confIDToConf[r.id] = r;
+        return r;
+    } catch(err){
+        console.log('[getConference]: outter err: ' + err);
+        return null;
+    }
+}
+
+async function initChatRooms(r) {
+    try {
         r.rooms = await populateActiveChannels(r);
         r.config = await getConfig(r);
         r.twilio = Twilio(r.config.TWILIO_ACCOUNT_SID, r.config.TWILIO_AUTH_TOKEN);
-        if(!r.config.TWILIO_CHAT_SERVICE_SID){
+        if (!r.config.TWILIO_CHAT_SERVICE_SID) {
             let newChatService = await r.twilio.chat.services.create({friendlyName: 'clowdr_chat'});
             await addOrReplaceConfig(r,"TWILIO_CHAT_SERVICE_SID", newChatService.sid);
         }
@@ -406,6 +433,7 @@ async function getConference(teamID, teamDomain) {
         //This is the first time we hit this conference on this run, so we should also grab the state of the world from twilio
 
         let roomsInTwilio = await r.twilio.video.rooms.list();
+
         let modRole = await getOrCreateRole(r.id,"moderator");
 
         for (let room of roomsInTwilio) {
@@ -542,33 +570,26 @@ async function getConference(teamID, teamDomain) {
             console.log(err);
         });
 
-        let allChannels = await r.config.slackClient.conversations.list({types: "private_channel,public_channel"});
-        for(let channel of allChannels.channels){
-            if(channel.name=="moderators"){
-                r.moderatorChannel = channel.id;
+        try {
+            let allChannels = await r.config.slackClient.conversations.list({types: "private_channel,public_channel"});
+
+            for(let channel of allChannels.channels){
+                if (channel.name=="moderators"){
+                    r.moderatorChannel = channel.id;
+                } else if(channel.name =="technical-support"){
+                    r.techSupportChannel = channel.id;
+                } else if(channel.name=="session-help"){
+                    r.sessionHelpChannel = channel.id;
+                }
             }
-            else if(channel.name =="technical-support"){
-                r.techSupportChannel = channel.id;
-            }else if(channel.name=="session-help"){
-                r.sessionHelpChannel = channel.id;
-            }
+        } catch (err) {
+            console.log('[getConference]: slack warn: ' + err);
         }
-        confCache[teamID] = r;
-        confIDToConf[r.id] = r;
-        return r;
-    }catch(err){
-        console.log("In get conference")
-        console.log(err);
-        return null;
+    } catch(err){
+        console.log('[getConference]: outter err: ' + err);
     }
 }
-async function getConferenceByParseID(confID){
-    if(confIDToConf[confID])
-        return confIDToConf[confID];
-    let q = new Parse.Query(ClowdrInstance);
-    let conf = q.get(confID, {useMasterKey: true});
-    return await getConference(conf.get("slackWorkspace"));
-}
+
 var userNotifications = {};
 
 async function pushToUserStream(parseUser, parseConference, topic) {
@@ -611,11 +632,10 @@ async function getConfig(conf) {
         config[obj.get("key")] = obj.get("value");
     }
     if (!config.FRONTEND_URL) {
-        config.FRONTEND_URL = "https://staging.clowdr.org"
+        config.FRONTEND_URL = process.env.FRONTEND_URL;
     }
     if (!config.TWILIO_CALLBACK_URL) {
-        config.TWILIO_CALLBACK_URL = "https://clowdr.herokuapp.com/twilio/event"
-        // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event" //TODO
+        config.TWILIO_CALLBACK_URL = process.env.TWILIO_CALLBACK_URL;
     }
     if (!config.TWILIO_ROOM_TYPE) {
         config.TWILIO_ROOM_TYPE = "group-small";
@@ -1960,7 +1980,8 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
             res.send({status: "Invalid token"})
             return;
         }
-        let conf = await getConference(req.body.conference);
+        console.log('[/chat/token]: ' + JSON.stringify(req.body.conference));
+        let conf = await getConferenceByParseID(req.body.conference);
 
         const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
             {ttl: 3600*24});
@@ -2137,18 +2158,9 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
 //     console.log(err);
 // });
 //At boot, we should still clear out our cache locally
-async function runBackend(){
+async function runBackend() {
     let promises = [];
     await createPrivileges();
-    let SessionQuery  =new Parse.Query(Parse.Session);
-    let fauxUser = new Parse.User();
-    fauxUser.id = "bO7cu90Ypk";
-    SessionQuery.equalTo("user",fauxUser);
-
-    let sessionToken = await SessionQuery.first({useMasterKey: true});
-    console.log(sessionToken)
-
-    sessionToken = sessionToken.get("sessionToken");
 
     let query = new Parse.Query("BreakoutRoom");
     query.limit(100);
@@ -2157,22 +2169,6 @@ async function runBackend(){
         parseRoomCache[room.id] = room;
         sidToRoom[room.get("twilioID")] = room;
     }
-    // var roomSubscription = parseLive.subscribe(query, sessionToken);
-    // roomSubscription.on("error", (err) => {
-    //     console.error("Subscription error")
-    //     console.log(err);
-    // });
-
-    // roomSubscription.on('create', (vid) => {
-    //     parseRoomCache[vid.id] = vid;
-    // })
-    // roomSubscription.on("delete", vid => {
-    //     parseRoomCache[vid.id] = undefined;
-    // });
-    // roomSubscription.on('update', (newItem) => {
-    //     parseRoomCache[vid.id] = newItem;
-    // });
-
 
     if (!process.env.SKIP_INIT) {
         let query = new Parse.Query(ClowdrInstance);
