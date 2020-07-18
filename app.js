@@ -54,6 +54,8 @@ var InstancePermission = Parse.Object.extend("InstancePermission");
 let LiveActivity = Parse.Object.extend("LiveActivity");
 let Channel = Parse.Object.extend("Channel");
 let UserProfile = Parse.Object.extend("UserProfile");
+let BondedChannel = Parse.Object.extend("BondedChannel");
+let TwilioChannelMirror = Parse.Object.extend("TwilioChannelMirror");
 
 
 function generateRandomString(length) {
@@ -110,6 +112,7 @@ async function getOrCreateRole(confID, priv) {
     //     confID = confID.id;
     // }
     let name = confID + "-" + priv;
+    console.log("Get or create role: " + name)
     // if (roleCache[name]){
     //     return roleCache[name];
     // }
@@ -876,7 +879,7 @@ async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
             profile.setACL(profileACL);
 
             await profile.save({}, {useMasterKey: true});
-            await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf, "conference"));
+            await ensureUserHasTeamRole(u, conf, await getOrCreateRole(conf.id, "conference"));
             u.get("profiles").add(profile);
             await u.save({}, {useMasterKey: true});
             return u;
@@ -1363,10 +1366,10 @@ async function processTwilioEvent(req, res) {
                 } else {
                     if(room.get("twilioChatID")){
                         //get the twilio client for this room to delete the chat room
-                        let confID = room.get("conference").id
-                        let conf = await getConferenceByParseID(confID);
-                        await conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).
-                        channels(room.get("twilioChatID")).remove();
+                        // let confID = room.get("conference").id
+                        // let conf = await getConferenceByParseID(confID);
+                        // await conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).
+                        // channels(room.get("twilioChatID")).remove();
                     }
                     await room.destroy({useMasterKey: true});
                 }
@@ -1418,6 +1421,40 @@ app.post("/twilio/chat/event", bodyParser.json(), bodyParser.urlencoded({extende
         console.log(err);
     }
 })
+app.post("/twilio/bondedChannel/:masterChannelID/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
+    res.send();
+    try {
+        if(req.body.EventType == "onMessageSent"){
+            //Re-broadcast this message to all of the channels bonded together
+            console.log("Pushing message to bonded channels for " + req.params.masterChannelID)
+            let allChannels = [];
+            let bondQ = new Parse.Query(BondedChannel);
+            bondQ.include("conference");
+            let masterChan = await bondQ.get(req.params.masterChannelID, {useMasterKey:true});
+            let childrenRelation = masterChan.relation("children");
+            let childrenQ = childrenRelation.query();
+            let mirrorChan = await childrenQ.find({useMasterKey: true});
+            allChannels = mirrorChan.map(c => c.get("sid"));
+            allChannels.push(masterChan.get("masterSID"));
+            allChannels = allChannels.filter(c=>c!=req.body.ChannelSid);
+            let conf = await getConference(masterChan.get("conference").get("slackWorkspace"));
+            for(let chan of allChannels){
+                conf.twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).
+                    channels(chan).messages.create({
+                   from: req.body.From,
+                   attributes: req.body.Attributes,
+                   body: req.body.Body,
+                   mediaSid: req.body.MediaSid
+                });
+            }
+
+        }
+
+    }catch(err){
+        console.log(err);
+    }
+})
+
 app.post("/twilio/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     res.send();
     try {
@@ -1469,7 +1506,7 @@ app.get("/slack/auth", async (req, res) => {
             installTo = new ClowdrInstance();
             installTo.set("slackWorkspace", resp.data.team.id);
             installTo.set("conferenceName", resp.data.team.name)
-            await installTo.save();
+            await installTo.save({},{useMasterKey: true});
             //create the sub account
             let account = await masterTwilioClient.api.accounts.create({friendlyName: installTo.id + ": " + resp.data.team.name});
             let newAuthToken = account.authToken;
@@ -1566,11 +1603,8 @@ async function createNewRoom(req, res){
                     //Create a chat room too
 
                     let chat = twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
-                    let twilioChatRoom = await chat.channels.create({
-                        friendlyName: roomName,
-                        type:
-                            (visibility == "unlisted" ? "private" : "public")
-                    });
+
+
                     //Create a new room in the DB
                     let parseRoom = new BreakoutRoom();
                     parseRoom.set("title", roomName);
@@ -1580,7 +1614,6 @@ async function createNewRoom(req, res){
                     parseRoom.set("persistence", persistence);
                     parseRoom.set("mode", mode);
                     parseRoom.set("capacity", maxParticipants);
-                    parseRoom.set("twilioChatID", twilioChatRoom.sid);
                     if(socialSpaceID){
                         let socialSpace  =new SocialSpace();
                         socialSpace.id = socialSpaceID;
@@ -1593,6 +1626,25 @@ async function createNewRoom(req, res){
                     acl.setPublicWriteAccess(false);
                     acl.setRoleReadAccess(modRole, true);
                     if (visibility == "unlisted") {
+                        acl.setReadAccess(parseUser.id, true);
+                    }
+                    else{
+                        acl.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
+                    }
+                    parseRoom.setACL(acl, {useMasterKey: true});
+                    await parseRoom.save({}, {useMasterKey: true});
+                    let attributes = {
+                        category: "breakoutRoom",
+                        roomID: parseRoom.id
+                    }
+
+                    let twilioChatRoom = await chat.channels.create({
+                        friendlyName: roomName,
+                        attributes: JSON.stringify(attributes),
+                        type:
+                            (visibility == "unlisted" ? "private" : "public")
+                    });
+                    if(visibility == "unlisted"){
                         //give this user access to the chat
                         let userProfile = await getUserProfile(parseUser.id, conf);
                         console.log("Creating chat room for " + roomName + " starting user " + userProfile.id)
@@ -1605,17 +1657,12 @@ async function createNewRoom(req, res){
                         profilesQuery.matchesQuery("user", userQuery);
                         profilesQuery.find({useMasterKey: true}).then((users)=>{
                             for(let user of users){
-                                 chat.channels(twilioChatRoom.sid).members.create({identity: user.id});
+                                chat.channels(twilioChatRoom.sid).members.create({identity: user.id});
                             }
                         })
-
-                        acl.setReadAccess(parseUser.id, true);
                     }
-                    else{
-                        acl.setRoleReadAccess(await getOrCreateRole(conf.id,"conference"), true);
-                    }
-                    parseRoom.setACL(acl, {useMasterKey: true});
-                    await parseRoom.save({}, {useMasterKey: true});
+                    parseRoom.set("twilioChatID", twilioChatRoom.sid);
+                    await parseRoom.save({},{useMasterKey: true});
                     sidToRoom[twilioRoom.sid] = parseRoom;
                     conf.rooms.push(parseRoom);
                     return res.send({status: "OK"});
@@ -1724,6 +1771,7 @@ async function updateACL(req,res){
         let parseUser = parseSession.get("user");
         //Check for roles...
         let roomQ = new Parse.Query("BreakoutRoom");
+        roomQ.include("conversation");
         let room = await roomQ.get(roomID, {sessionToken: identity});
         if (!room) {
             return res.send({status: 'error', message: "No such room"});
@@ -1750,7 +1798,10 @@ async function updateACL(req,res){
         }
         for (let user of users) {
             if (!usersWithAccessCurrently.includes(user)) {
-                room.getACL().setReadAccess(user,true);
+
+                if(room.get("conversation"))
+                    room.get("conversation").getACL().setReadAccess(user, true);
+                room.getACL().setReadAccess(user, true);
                 let userProfile = await getUserProfile(user, conf);
                 promises.push(chat.channels(room.get("twilioChatID")).members.create({identity: userProfile.id}));
                 let fauxUser = new Parse.User();
@@ -1758,9 +1809,12 @@ async function updateACL(req,res){
                 usersToRefresh.push(fauxUser);
             }
         }
-        if(users.length == 0){
+        if (room.get("conversation")) {
+            await room.get("conversation").save({}, {useMasterKey: true});
+        }
+        if (users.length == 0) {
             await room.destroy({useMasterKey: true});
-        }else {
+        } else {
             await room.save({}, {useMasterKey: true});
         }
         await Promise.all(promises);
@@ -2051,6 +2105,9 @@ app.post('/video/deleteRoom',bodyParser.json(), bodyParser.urlencoded({extended:
         //First, remove all users.
         let roomQ = new Parse.Query(BreakoutRoom);
         let room = await roomQ.get(roomID, {useMasterKey: true});
+        if(!room){
+            console.log("Unable to find room:" + roomID)
+        }
         let promises = [];
         for(let member of room.get("members")){
             console.log("Kick: " + member.id);
