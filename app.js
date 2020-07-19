@@ -808,6 +808,33 @@ async function ensureUserHasTeamRole(user, conf, role) {
     }
 }
 
+var privilegeRoles = {
+    "createVideoRoom": null,
+    "chat": null,
+    "access-from-slack": null,
+    "createVideoRoom-persistent": null,
+    "createVideoRoom-group": null,
+    "createVideoRoom-smallgroup": null,
+    "createVideoRoom-peer-to-peer": null,
+    'createVideoRoom-private': null,
+    "moderator": null
+};
+
+async function getPrivileges() {
+    let actionsQ = new Parse.Query(PrivilegedAction);
+    actionsQ.include("action")
+    actionsQ.include("role");
+    let pactions = await actionsQ.find({useMasterKey: true});
+    console.log("Get privileges: " + pactions ? pactions.length : 0);
+
+    Object.keys(privilegeRoles).map(actionName => {
+        let action = pactions.find(act => act.get("action") == actionName);
+        if (action) {
+            privilegeRoles[actionName] = action;
+        }
+    });
+}
+
 async function getOrCreateParseUser(slackUID, conf, slackClient, slackProfile) {
     //First try retrieving by slack ID
     let q = new Parse.Query(UserProfile);
@@ -1535,13 +1562,21 @@ async function getSession(token) {
 app.post("/video/new", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
   return await createNewRoom(req, res);
 });
+
 async function createNewRoom(req, res){
     //Validate parse user can create this room
     let token = req.body.identity;
     // let conf = req.body.conf;
     // let confID = req.body.confid;
     let teamName = req.body.slackTeam;
+    let confID = req.body.conference;
     let conf = await getConference(teamName);
+    if (!conf) {
+        conf = await getConferenceByParseID(confID);
+    }
+    if (!conf) 
+        console.log('Warn: Request did not include data to find the conference');
+
     let roomName = req.body.room;
     let twilio = conf.twilio;
     let visibility = req.body.visibility;
@@ -1567,8 +1602,10 @@ async function createNewRoom(req, res){
             const accesToConf = new Parse.Query(InstancePermission);
             accesToConf.equalTo("conference", conf);
             accesToConf.equalTo("action", privilegeRoles['createVideoRoom']);
+            console.log('--> ' + JSON.stringify(privilegeRoles['createVideoRoom']));
             //TODO access-check for each option, too, but I don't have time now...
             const hasAccess = await accesToConf.first({sessionToken: token});
+            console.log('Permission to create video room? ' + hasAccess);
             if (hasAccess && hasAccess.id) {
                 //Try to create the room
                 try {
@@ -1911,15 +1948,16 @@ async function createTwilioRoomForParseRoom(parseRoom, conf){
     });
     return twilioRoom;
 }
+
 async function mintTokenForFrontend(req, res) {
     let identity = req.body.identity;
     console.log("TOken requested by " + identity)
     const room = req.body.room;
-    const conference = req.body.conf;
-    let conf = await getConference(conference);
+    const conference = req.body.conference;
+    let conf = await getConferenceByParseID(conference);
     let userQ = new Parse.Query(Parse.Session);
     userQ.equalTo("sessionToken", identity);
-    userQ.include(["user.displayname"]);
+    // userQ.include(["user.displayname"]);
     // console.log(identity)
     let parseSession = await userQ.first({useMasterKey: true});
     let parseUser = parseSession.get("user");
@@ -2208,6 +2246,8 @@ async function runBackend() {
         parseRoomCache[room.id] = room;
         sidToRoom[room.get("twilioID")] = room;
     }
+
+    await getPrivileges();
 
     if (!process.env.SKIP_INIT) {
         let query = new Parse.Query(ClowdrInstance);
