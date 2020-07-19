@@ -19,11 +19,12 @@ npm install
 npm start
 ```
 
-### Enable chat webhooks for twilio
+## Enable chat webhooks for twilio
 We use a webhook from twilio to track who is online.
 From your Twilio programmable chat service dashboard:
 * Base configuration -> Enable reachability, message read status
-* Webhooks -> Post event webhook, callback URL is your backend server e.g. https://back.clowdr.org/twilio/chat/event , HTTP-POST method, `onUserUpdated` event only.
+* Webhooks -> Post event webhook, callback URL is your backend server e.g. https://xxxxx.ngrok.io/twilio/chat/event , HTTP-POST method, `onUserUpdated` event only.
 * Save
 
+If you are in a development environment, you may need to set up a tunnel for Twilio to reach your server. Ngrok will work.
 
