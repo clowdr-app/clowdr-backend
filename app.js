@@ -405,7 +405,13 @@ async function initChatRooms(r) {
         r.rooms = await populateActiveChannels(r);
         r.config = await getConfig(r);
 
-        r.twilio = Twilio(r.config.TWILIO_ACCOUNT_SID, r.config.TWILIO_AUTH_TOKEN);
+        try {
+            r.twilio = Twilio(r.config.TWILIO_ACCOUNT_SID, r.config.TWILIO_AUTH_TOKEN);
+        } catch (err) {
+            console.log(`[initChatRooms]: failed to connect to Twilio with account ${r.config.TWILIO_ACCOUNT_SID} and auth token ${r.config.TWILIO_AUTH_TOKEN}. Check your credentials`);
+            return;
+        }
+        
         if (!r.config.TWILIO_CHAT_SERVICE_SID) {
             let newChatService = await r.twilio.chat.services.create({friendlyName: 'clowdr_chat'});
             await addOrReplaceConfig(r,"TWILIO_CHAT_SERVICE_SID", newChatService.sid);
