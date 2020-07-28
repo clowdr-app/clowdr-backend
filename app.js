@@ -582,15 +582,17 @@ async function initChatRooms(r) {
         });
 
         try {
-            let allChannels = await r.config.slackClient.conversations.list({types: "private_channel,public_channel"});
+            if(r.config.slackClient) {
+                let allChannels = await r.config.slackClient.conversations.list({types: "private_channel,public_channel"});
 
-            for(let channel of allChannels.channels){
-                if (channel.name=="moderators"){
-                    r.moderatorChannel = channel.id;
-                } else if(channel.name =="technical-support"){
-                    r.techSupportChannel = channel.id;
-                } else if(channel.name=="session-help"){
-                    r.sessionHelpChannel = channel.id;
+                for (let channel of allChannels.channels) {
+                    if (channel.name == "moderators") {
+                        r.moderatorChannel = channel.id;
+                    } else if (channel.name == "technical-support") {
+                        r.techSupportChannel = channel.id;
+                    } else if (channel.name == "session-help") {
+                        r.sessionHelpChannel = channel.id;
+                    }
                 }
             }
         } catch (err) {
