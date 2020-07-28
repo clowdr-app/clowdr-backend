@@ -662,7 +662,8 @@ async function getConfig(conf) {
         config.LOGIN_FROM_SLACK = true;
     }
     // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event";
-    config.slackClient = new WebClient(config.SLACK_BOT_TOKEN);
+    if(config.SLACK_BOT_TOKEN)
+        config.slackClient = new WebClient(config.SLACK_BOT_TOKEN);
 
     // console.log(JSON.stringify(config,null,2))
     return config;
