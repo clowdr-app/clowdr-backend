@@ -2067,23 +2067,27 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
         console.log('[/chat/token]: conference: ' + JSON.stringify(req.body.conference));
         let conf = await getConferenceByParseID(req.body.conference);
 
-        const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
-            {ttl: 3600*24});
-        let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
-        let name = userProfile.id;
-        let sessionID = sessionObj.id;
-        const chatGrant = new ChatGrant({
-            serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
-            endpointId: `${name}:browser:${sessionID}`
+        try {
+            const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
+                {ttl: 3600 * 24});
+            let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
+            let name = userProfile.id;
+            let sessionID = sessionObj.id;
+            const chatGrant = new ChatGrant({
+                serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
+                endpointId: `${name}:browser:${sessionID}`
 
-        });
-        accessToken.addGrant(chatGrant);
-        accessToken.identity = name;
-        res.set('Content-Type', 'application/json');
-        res.send(JSON.stringify({
-            token: accessToken.toJwt(),
-            identity: name
-        }));
+            });
+            accessToken.addGrant(chatGrant);
+            accessToken.identity = name;
+            res.set('Content-Type', 'application/json');
+            res.send(JSON.stringify({
+                token: accessToken.toJwt(),
+                identity: name
+            }));
+        } catch (err) {
+            res.send(JSON.stringify({status: "Error", message: err}));
+        }
 
     } catch (err) {
         next(err);
