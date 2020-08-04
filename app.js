@@ -1412,6 +1412,25 @@ function getUserPresence(profileID) {
     return presenceCache[profileID];
 }
 
+app.post("/webhook/zoom/participant", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
+    res.send();
+    try {
+        let meeting_id = req.body.payload.id;
+        if(req.body.payload.object && req.body.payload.object.participant)
+        {
+            let registrant_id = req.body.payload.object.participant.id;
+            if(req.body.event == "meeting_participant_joined"){
+
+            }else if(req.body.event == "meeting_participant_left"){
+
+            }
+        }
+    }catch(err){
+        console.log(err);
+    }
+})
+
+
 app.post("/twilio/chat/event", bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res) => {
     res.send();
     try {
@@ -1964,6 +1983,13 @@ async function mintTokenForFrontend(req, res) {
     const room = req.body.room;
     const conference = req.body.conference;
     let conf = await getConferenceByParseID(conference);
+    if(!conf.config.TWILIO_ACCOUNT_SID){
+        res.status(403);
+        console.log("Received invalid conference request: ");
+        console.log(req.body);
+        res.send({status: "error", message: "Conference not configured."})
+        return;
+    }
     let userQ = new Parse.Query(Parse.Session);
     userQ.equalTo("sessionToken", identity);
     // userQ.include(["user.displayname"]);
