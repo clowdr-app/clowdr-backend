@@ -1419,6 +1419,9 @@ app.post("/webhook/zoom/participant", bodyParser.json(), bodyParser.urlencoded({
         if(req.body.payload.object && req.body.payload.object.participant)
         {
             let registrant_id = req.body.payload.object.participant.id;
+            console.log(req.body.event+"\t"+registrant_id)
+            console.log(req.body)
+            console.log(req.body.payload.object.participant)
             if(req.body.event == "meeting_participant_joined"){
 
             }else if(req.body.event == "meeting_participant_left"){
@@ -2169,9 +2172,11 @@ app.post('/video/deleteRoom',bodyParser.json(), bodyParser.urlencoded({extended:
             console.log("Unable to find room:" + roomID)
         }
         let promises = [];
-        for(let member of room.get("members")){
-            console.log("Kick: " + member.id);
-            promises.push(removeFromCall(conf.twilio,room.get("twilioID"), member.id));
+        if(room.get("members")){
+            for(let member of room.get("members")){
+                console.log("Kick: " + member.id);
+                promises.push(removeFromCall(conf.twilio,room.get("twilioID"), member.id));
+            }
         }
         await Promise.all(promises);
         await room.destroy({useMasterKey: true});
