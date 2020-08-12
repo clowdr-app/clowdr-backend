@@ -559,23 +559,23 @@ async function initChatRooms(r) {
         //         }
         //     }
         // ));
-        promises.push(
-            chatService.channels("#general").fetch().then((chan)=>{
-                if(!chan.sid){
-                    return chatService.channels.create({uniqueName: "#general", friendlyName: "#general", type: "public"}).catch(err=>{});
-                }
-
-                if(chan.friendlyName == "#general")
-                    return;
-                return chatService.channels("#general").update({uniqueName: "#general", friendlyName: "#general"}).then((chan)=>{
-                }).catch(err=>{
-                    console.log("Unable to update channel")
-                    console.log(chan);
-                });
-            }).catch(err=>{
-                console.log(err);
-            })
-        )
+        // promises.push(
+        //     chatService.channels("#general").fetch().then((chan)=>{
+        //         if(!chan.sid){
+        //             return chatService.channels.create({uniqueName: "#general", friendlyName: "#general", type: "public"}).catch(err=>{});
+        //         }
+        //
+        //         if(chan.friendlyName == "#general")
+        //             return;
+        //         return chatService.channels("#general").update({uniqueName: "#general", friendlyName: "#general"}).then((chan)=>{
+        //         }).catch(err=>{
+        //             console.log("Unable to update channel")
+        //             console.log(chan);
+        //         });
+        //     }).catch(err=>{
+        //         console.log(err);
+        //     })
+        // )
 
         await Promise.all(promises).catch((err)=>{
             console.log(err);
