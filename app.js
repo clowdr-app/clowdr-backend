@@ -1616,7 +1616,7 @@ async function createNewRoom(req, res){
     let persistence = req.body.persistence;
     let socialSpaceID = req.body.socialSpace;
     if (!mode)
-        mode = "group-small";
+        mode = "group";
     if (!persistence)
         persistence = "ephemeral";
 
