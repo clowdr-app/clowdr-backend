@@ -163,6 +163,9 @@ async function addOrReplaceConfig(installTo, key, value) {
 }
 
 let confQ = new Parse.Query(ClowdrInstance);
+let conf = new ClowdrInstance();
+conf.id = "8XdrQ9yIIy";
+confQ.equalTo("conference",conf)
 confQ.find({useMasterKey: true}).then( async(confs)=>{
     for (let conf of confs){
         // await createDefaultRoles(conf.get("conferenceName"));

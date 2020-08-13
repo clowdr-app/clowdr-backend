@@ -1616,7 +1616,7 @@ async function createNewRoom(req, res){
     let persistence = req.body.persistence;
     let socialSpaceID = req.body.socialSpace;
     if (!mode)
-        mode = "group";
+        mode = "group-small";
     if (!persistence)
         persistence = "ephemeral";
 
@@ -2125,17 +2125,22 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
     // });
 });
-
+async function userInRoles(user, allowedRoles) {
+    const roles = await new Parse.Query(Parse.Role).equalTo('users', user).find();
+    return roles.find(r => allowedRoles.find(allowed => r.get("name") == allowed));
+}
+async function sessionTokenIsFromModerator(sessionToken, confID){
+    let session = await getSession(sessionToken);
+    let user = session.get("user");
+    return await userInRoles(user, [confID+"-moderator",confID+"-admin",confID+"-manager"]);
+}
 app.post('/chat/deleteMessage',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
     const identity = req.body.identity;
     const messageSID = req.body.message;
     const channelSID = req.body.room;
-    let conf = await getConference(req.body.conference);
     try {
-        const accesToConf = new Parse.Query(InstancePermission);
-        accesToConf.equalTo("conference", conf);
-        accesToConf.equalTo("action", privilegeRoles['moderator']);
-        const hasAccess = await accesToConf.first({sessionToken: identity});
+        const hasAccess = await sessionTokenIsFromModerator(identity, req.body.conference);
+        let conf = await getConferenceByParseID(req.body.conference);
         if(!hasAccess){
             res.status(403);
             res.send();
@@ -2156,10 +2161,11 @@ app.post('/video/deleteRoom',bodyParser.json(), bodyParser.urlencoded({extended:
     const roomID = req.body.room;
     let conf = await getConference(req.body.conference);
     try {
-        const accesToConf = new Parse.Query(InstancePermission);
-        accesToConf.equalTo("conference", conf);
-        accesToConf.equalTo("action", privilegeRoles['moderator']);
-        const hasAccess = await accesToConf.first({sessionToken: identity});
+        // const accesToConf = new Parse.Query(InstancePermission);
+        // accesToConf.equalTo("conference", conf);
+        // accesToConf.equalTo("action", privilegeRoles['moderator']);
+        // const hasAccess = await accesToConf.first({sessionToken: identity});
+        const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
         if(!hasAccess){
             res.status(403);
             res.send();
@@ -2196,10 +2202,10 @@ app.post('/users/ban',bodyParser.json(), bodyParser.urlencoded({extended: false}
     const isBan = req.body.isBan;
     let conf = await getConference(req.body.conference);
     try {
-        const accesToConf = new Parse.Query(InstancePermission);
-        accesToConf.equalTo("conference", conf);
-        accesToConf.equalTo("action", privilegeRoles['moderator']);
-        const hasAccess = await accesToConf.first({sessionToken: identity});
+        // const accesToConf = new Parse.Query(InstancePermission);
+        // accesToConf.equalTo("conference", conf);
+        // accesToConf.equalTo("action", privilegeRoles['moderator']);
+        const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
         if(!hasAccess){
             res.status(403);
             res.send();

@@ -28,7 +28,8 @@ var privilegeRoles = {
     "createVideoRoom-smallgroup": null,
     "createVideoRoom-peer-to-peer": null,
     'createVideoRoom-private': null,
-    "moderator": null
+    "moderator": null,
+    'announcement-global': null
 };
 
 async function createPrivileges() {
