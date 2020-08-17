@@ -1601,6 +1601,7 @@ async function createNewRoom(req, res){
     // let confID = req.body.confid;
     let teamName = req.body.slackTeam;
     let confID = req.body.conference;
+    console.log("Create new room: Fetch conference")
     let conf = await getConference(teamName);
     if (!conf) {
         conf = await getConferenceByParseID(confID);
@@ -1608,6 +1609,7 @@ async function createNewRoom(req, res){
     if (!conf) 
         console.log('Warn: Request did not include data to find the conference');
 
+    console.log("Create new room: got conference")
     let roomName = req.body.room;
     let twilio = conf.twilio;
     let visibility = req.body.visibility;
@@ -1627,6 +1629,7 @@ async function createNewRoom(req, res){
         query.include("user");
         query.equalTo("sessionToken", token);
         let session = await query.first({useMasterKey: true});
+        console.log("Create new room: Got user from session token")
         if (session) {
             let parseUser = session.get("user");
             //Validate has privileges for conference
