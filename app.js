@@ -2105,9 +2105,10 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
             let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
             let name = userProfile.id;
             let sessionID = sessionObj.id;
+            let now = new Date().getTime();
             const chatGrant = new ChatGrant({
                 serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
-                endpointId: `${name}:browser:${sessionID}`
+                endpointId: `${name}:browser:${sessionID}:${now}`
 
             });
             accessToken.addGrant(chatGrant);
