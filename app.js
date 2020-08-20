@@ -1817,6 +1817,8 @@ async function updateACL(req,res){
         const roomID = req.body.roomID;
         const conference = req.body.slackTeam;
         const users = req.body.users;
+        console.log("ACL request: " + roomID + ", " + conference + ", " )
+        console.log(users);
         let conf = await getConference(conference);
         let userQ = new Parse.Query(Parse.Session);
         userQ.equalTo("sessionToken", identity);
