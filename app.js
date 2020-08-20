@@ -1989,6 +1989,7 @@ async function mintTokenForFrontend(req, res) {
     const room = req.body.room;
     const conference = req.body.conference;
     let conf = await getConferenceByParseID(conference);
+    console.log("Token for - " + conf.id)
     if(!conf.config.TWILIO_ACCOUNT_SID){
         res.status(403);
         console.log("Received invalid conference request: ");
@@ -2007,6 +2008,7 @@ async function mintTokenForFrontend(req, res) {
     userProfileQ.equalTo("conference", conf);
     let userProfile = await userProfileQ.first({useMasterKey: true});
     identity = userProfile.id;
+    console.log("Identity: " + identity)
 
     // console.log("Get token for video for " + identity + " " + room)
     if (!room) {
@@ -2015,10 +2017,12 @@ async function mintTokenForFrontend(req, res) {
     }
     let query = new Parse.Query("BreakoutRoom");
     let roomData = await query.get(room, {sessionToken: req.body.identity});
+    console.log("Got room " + roomData.id)
     if (!roomData.get("twilioID")) {
         if (roomData.get("persistence") == "persistent") {
             //Create a new twilio room
             try {
+                console.log("Creating new room")
                 let twilioRoom = await createTwilioRoomForParseRoom(roomData, conf);
                 roomData.set("twilioID", twilioRoom.sid);
                 await roomData.save({}, {useMasterKey: true});
@@ -2041,8 +2045,10 @@ async function mintTokenForFrontend(req, res) {
         res.status(403);
         res.error();
     }
+    console.log("Minting token")
     const token = videoToken(identity, roomData.get('twilioID'), conf.config);
     // console.log("Sent response" + token);
+    console.log("Sending response")
     sendTokenResponse(token, roomData.get('title'), res);
 
     // newNode[uid] = true;
