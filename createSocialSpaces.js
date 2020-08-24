@@ -79,6 +79,7 @@ async function createSocialSpaces(confName){
         spaceQ.equalTo("name", spaceName);
         spaceQ.equalTo("isGlobal", true);
         let space = await spaceQ.first({useMasterKey: true});
+        console.log(space)
         if(!space){
             space= new SocialSpace();
             space.set("conference", conf);
@@ -165,9 +166,10 @@ async function addOrReplaceConfig(installTo, key, value) {
 let confQ = new Parse.Query(ClowdrInstance);
 let conf = new ClowdrInstance();
 conf.id = "8XdrQ9yIIy";
-confQ.equalTo("conference",conf)
-confQ.find({useMasterKey: true}).then( async(confs)=>{
-    for (let conf of confs){
+// confQ.equalTo("conference",conf)
+console.log(conf)
+confQ.get(conf.id,{useMasterKey: true}).then( async(conf)=>{
+    // for (let conf of confs){
         // await createDefaultRoles(conf.get("conferenceName"));
         await createSocialSpaces(conf.get("conferenceName"));
         //Also for debugging: force create a twilio config
@@ -184,5 +186,5 @@ confQ.find({useMasterKey: true}).then( async(confs)=>{
         // await addOrReplaceConfig(conf, "TWILIO_AUTH_TOKEN", newAuthToken);
         // await addOrReplaceConfig(conf, "TWILIO_ROOM_TYPE", "peer-to-peer")
         // console.log("done")
-    }
+    // }
 })

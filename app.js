@@ -1646,7 +1646,7 @@ async function createNewRoom(req, res){
                     console.log("creating room with callback" + conf.config.TWILIO_CALLBACK_URL)
                     console.log("For " + parseUser.id + ": " + parseUser.get("displayname"))
                     console.log(roomName)
-                    let maxParticipants = (mode == "peer-to-peer" ? 10 : (mode == "group-small" ? 4 : 10));
+                    let maxParticipants = (mode == "peer-to-peer" ? 10 : (mode == "group-small" ? 4 : 50));
                     let twilioRoom = await twilio.video.rooms.create({
                         type: mode,
                         // type: conf.config.TWILIO_ROOM_TYPE,
