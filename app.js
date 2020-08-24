@@ -390,7 +390,7 @@ async function getConference(teamID, teamDomain) {
             console.log("Unable to find workspace in ClowdrDB: " + teamID + ", " + teamDomain);
         }
 
-        // await initChatRooms(r);
+        await initChatRooms(r);
 
         confCache[teamID] = r;
         confIDToConf[r.id] = r;
@@ -1602,11 +1602,11 @@ async function createNewRoom(req, res){
     // let confID = req.body.confid;
     let teamName = req.body.slackTeam;
     let confID = req.body.conference;
-    console.log("Create new room: Fetch conference")
-    let conf = await getConference(teamName);
-    if (!conf) {
-        conf = await getConferenceByParseID(confID);
-    }
+    console.log("Create new room: Fetch conference " + teamName)
+    // let conf = await getConference(teamName);
+    // if (!conf) {
+        let  conf = await getConferenceByParseID(confID);
+    // }
     if (!conf) 
         console.log('Warn: Request did not include data to find the conference');
 
@@ -2102,6 +2102,7 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
         console.log(identity + " get session");
         let sessionObj = await getSession(identity);
         if(!sessionObj){
+            console.log(identity + " is invalid")
             res.status(403);
             res.send({status: "Invalid token"})
             return;
