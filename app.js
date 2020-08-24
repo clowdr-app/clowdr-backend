@@ -360,6 +360,7 @@ console.log(e);
 async function getConferenceByParseID(confID){
     if (confIDToConf[confID])
         return confIDToConf[confID];
+    console.log("Init conference called " + confID)
     let q = new Parse.Query(ClowdrInstance);
     let conf = await q.get(confID, {useMasterKey: true});
 
@@ -389,7 +390,7 @@ async function getConference(teamID, teamDomain) {
             console.log("Unable to find workspace in ClowdrDB: " + teamID + ", " + teamDomain);
         }
 
-        await initChatRooms(r);
+        // await initChatRooms(r);
 
         confCache[teamID] = r;
         confIDToConf[r.id] = r;
@@ -2098,22 +2099,28 @@ app.post("/slack/login", bodyParser.json(), bodyParser.urlencoded({extended: fal
 app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false}), async (req, res, next) => {
     const identity = req.body.identity;
     try {
+        console.log(identity + " get session");
         let sessionObj = await getSession(identity);
         if(!sessionObj){
             res.status(403);
             res.send({status: "Invalid token"})
             return;
         }
+        console.log(identity + " get conf");
         console.log('[/chat/token]: conference: ' + JSON.stringify(req.body.conference));
         let conf = await getConferenceByParseID(req.body.conference);
 
         try {
+            console.log(identity + " got conf");
             const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
                 {ttl: 3600 * 24});
+            console.log(identity + " get profile")
             let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
+            console.log(identity + " got profile");
             let name = userProfile.id;
             let sessionID = sessionObj.id;
             let now = new Date().getTime();
+            console.log(identity +  " making grant")
             const chatGrant = new ChatGrant({
                 serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
                 endpointId: `${name}:browser:${sessionID}:${now}`
@@ -2121,6 +2128,7 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
             });
             accessToken.addGrant(chatGrant);
             accessToken.identity = name;
+            console.log(identity + " Sending token")
             res.set('Content-Type', 'application/json');
             res.send(JSON.stringify({
                 token: accessToken.toJwt(),
