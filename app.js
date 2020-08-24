@@ -2112,6 +2112,7 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
 
         try {
             console.log(identity + " got conf");
+            console.log(JSON.stringify(conf.config));
             const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
                 {ttl: 3600 * 24});
             console.log(identity + " get profile")
@@ -2321,28 +2322,28 @@ async function runBackend() {
 
     await getPrivileges();
 
-    if (!process.env.SKIP_INIT) {
-        let query = new Parse.Query(ClowdrInstance);
-        query.find({useMasterKey: true}).then((instances) => {
-            instances.forEach(
-                async (inst) => {
-                    try {
-                        if (inst.get("slackWorkspace")) //&& inst.id =='pvckfSmmTp')
-                            promises.push(getConference(inst.get("slackWorkspace")).then((conf) => {
-                                console.log("Finished " + conf.get("conferenceName"))
-                            }).catch(err => {
-                                console.log("Unable to load data for  " + inst.get("conferenceName"))
-                                console.log(err);
-                            }));
-                    } catch (err) {
-                        console.log(err);
-                    }
-                }
-            )
-        }).catch((err) => {
-            console.log(err);
-        });
-    }
+    // if (!process.env.SKIP_INIT) {
+    //     let query = new Parse.Query(ClowdrInstance);
+    //     query.find({useMasterKey: true}).then((instances) => {
+    //         instances.forEach(
+    //             async (inst) => {
+    //                 try {
+    //                     if (inst.get("slackWorkspace")) //&& inst.id =='pvckfSmmTp')
+    //                         promises.push(getConference(inst.get("slackWorkspace")).then((conf) => {
+    //                             console.log("Finished " + conf.get("conferenceName"))
+    //                         }).catch(err => {
+    //                             console.log("Unable to load data for  " + inst.get("conferenceName"))
+    //                             console.log(err);
+    //                         }));
+    //                 } catch (err) {
+    //                     console.log(err);
+    //                 }
+    //             }
+    //         )
+    //     }).catch((err) => {
+    //         console.log(err);
+    //     });
+    // }
     Promise.all(promises).then(() => {
         app.listen(process.env.PORT || 3001, () =>
             console.log('Express server is running on localhost:3001')
