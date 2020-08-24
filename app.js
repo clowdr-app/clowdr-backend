@@ -2115,6 +2115,7 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
             const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
                 {ttl: 3600 * 24});
             console.log(identity + " get profile")
+            console.log(sessionObj.get("user"));
             let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
             console.log(identity + " got profile");
             let name = userProfile.id;
@@ -2139,6 +2140,7 @@ app.post('/chat/token',bodyParser.json(), bodyParser.urlencoded({extended: false
         }
 
     } catch (err) {
+        console.log(err);
         next(err);
     }
     // newNode[uid] = true;
