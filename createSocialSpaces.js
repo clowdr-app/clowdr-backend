@@ -4,18 +4,9 @@ const Twilio = require("twilio");
 const Parse = require("parse/node");
 Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE_JS_KEY, process.env.PARSE_MASTER_KEY);
 Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
-const {WebClient} = require('@slack/web-api');
-let SlackHomeBlocks = Parse.Object.extend("SlackHomeBlocks");
 let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
-let ClowdrInstanceAccess = Parse.Object.extend("ClowdrInstanceAccess");
 
 let InstanceConfig = Parse.Object.extend("InstanceConfiguration");
-let BreakoutRoom = Parse.Object.extend("BreakoutRoom");
-let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
-var InstancePermission = Parse.Object.extend("InstancePermission");
-let LiveActivity = Parse.Object.extend("LiveActivity");
-let Channel = Parse.Object.extend("Channel");
-let UserProfile = Parse.Object.extend("UserProfile");
 let SocialSpace = Parse.Object.extend("SocialSpace");
 
 async function getConfig(conf) {
@@ -39,10 +30,7 @@ async function getConfig(conf) {
     if (!config.AUTO_CREATE_USER) {
         config.AUTO_CREATE_USER = true;
     }
-    // config.TWILIO_CALLBACK_URL = "https://clowdr-dev.ngrok.io/twilio/event";
-    config.slackClient = new WebClient(config.SLACK_BOT_TOKEN);
 
-    // console.log(JSON.stringify(config,null,2))
     return config;
 }
 
@@ -53,7 +41,7 @@ async function getConferenceByName(confName){
         q.equalTo("conferenceName", confName);
         r = await q.first();
     } catch (err) {
-        console.log(err);
+        console.error(err);
     }
     // } catch (err) {
     if (!r) {
