@@ -8,7 +8,6 @@ Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
 var privilegeRoles = {
     "createVideoRoom": null,
     "chat": null,
-    "access-from-slack": null,
     "createVideoRoom-persistent": null,
     "createVideoRoom-group": null,
     "createVideoRoom-smallgroup": null,
@@ -28,57 +27,57 @@ async function getParseAdminRole() {
         return adminRole;
     let roleQ = new Parse.Query(Parse.Role);
     roleQ.equalTo("name", "ClowdrSysAdmin");
-    adminRole = await roleQ.first({useMasterKey: true});
+    adminRole = await roleQ.first({ useMasterKey: true });
     return adminRole;
 }
 
 async function createPrivileges() {
     return Promise.all(Object.keys(privilegeRoles).map(async (action) => {
-            let actionsQ = new Parse.Query(PrivilegedAction);
-            actionsQ.equalTo("action", action)
-            actionsQ.include("role");
-            let res = await actionsQ.first({useMasterKey: true});
-            if (!res) {
-                let pa = new PrivilegedAction();
-                pa.set("action", action);
-                let roleACL = new Parse.ACL();
-                roleACL.setPublicReadAccess(true);
-                roleACL.setRoleWriteAccess(await getParseAdminRole(), true);
-                let prole = new Parse.Role("action-" + action, roleACL);
-                await prole.save({}, {useMasterKey: true});
-                pa.set("role", prole);
-                let actionACL = new Parse.ACL();
-                actionACL.setPublicReadAccess(false);
-                actionACL.setRoleReadAccess(prole, true);
-                pa.setACL(actionACL);
-                res = await pa.save({}, {useMasterKey: true});
-            }
-            privilegeRoles[action] = res;
+        let actionsQ = new Parse.Query(PrivilegedAction);
+        actionsQ.equalTo("action", action)
+        actionsQ.include("role");
+        let res = await actionsQ.first({ useMasterKey: true });
+        if (!res) {
+            let pa = new PrivilegedAction();
+            pa.set("action", action);
+            let roleACL = new Parse.ACL();
+            roleACL.setPublicReadAccess(true);
+            roleACL.setRoleWriteAccess(await getParseAdminRole(), true);
+            let prole = new Parse.Role("action-" + action, roleACL);
+            await prole.save({}, { useMasterKey: true });
+            pa.set("role", prole);
+            let actionACL = new Parse.ACL();
+            actionACL.setPublicReadAccess(false);
+            actionACL.setRoleReadAccess(prole, true);
+            pa.setACL(actionACL);
+            res = await pa.save({}, { useMasterKey: true });
         }
+        privilegeRoles[action] = res;
+    }
     ));
 }
 
 createPrivileges().then(async (res) => {
     let confsQ = new Parse.Query("ClowdrInstance");
-    let confs = await confsQ.find({useMasterKey: true});
+    let confs = await confsQ.find({ useMasterKey: true });
 
-    Promise.all(confs.map(async(conf)=>{
+    Promise.all(confs.map(async (conf) => {
         let promises = [];
-        for(let action of Object.values(privilegeRoles)){
+        for (let action of Object.values(privilegeRoles)) {
             let permissionQ = new Parse.Query(InstancePermission);
             permissionQ.equalTo("conference", conf);
             permissionQ.equalTo("action", action);
-            let priv = await permissionQ.first({useMasterKey: true});
-            if(!priv){
+            let priv = await permissionQ.first({ useMasterKey: true });
+            if (!priv) {
                 console.log("Creating")
                 priv = new InstancePermission();
-                priv.set("conference",conf);
-                priv.set("action",action);
+                priv.set("conference", conf);
+                priv.set("action", action);
                 let acl = new Parse.ACL();
                 acl.setPublicReadAccess(false)
-                    acl.setRoleReadAccess(conf.id + "-conference", true);
+                acl.setRoleReadAccess(conf.id + "-conference", true);
                 priv.setACL(acl);
-                promises.push(priv.save({},{useMasterKey: true}));
+                promises.push(priv.save({}, { useMasterKey: true }));
             }
         }
         return promises;
@@ -86,7 +85,7 @@ createPrivileges().then(async (res) => {
     console.log("DOne")
 })
 
-let roleCache={};
+let roleCache = {};
 async function getOrCreateRole(confID, priv) {
     // if(typeof(confID) === 'object'){
     //     confID = confID.id;
@@ -99,7 +98,7 @@ async function getOrCreateRole(confID, priv) {
         var roleQ = new Parse.Query(Parse.Role);
         roleQ.equalTo("name", name);
         roleQ.include("users");
-        let role = await roleQ.first({useMasterKey: true});
+        let role = await roleQ.first({ useMasterKey: true });
         if (!role) {
             let roleACL = new Parse.ACL();
 
@@ -108,11 +107,11 @@ async function getOrCreateRole(confID, priv) {
             let newrole = new Parse.Role(name, roleACL);
             newrole.getRoles().add(adminRole);
             try {
-                newrole = await newrole.save({}, {useMasterKey: true});
+                newrole = await newrole.save({}, { useMasterKey: true });
                 console.log(newrole);
             } catch (err) {
                 console.log("Did not actually create it:")
-                console.log(err);
+                console.error(err);
             }
             roleCache[name] = newrole;
         } else {
@@ -120,7 +119,7 @@ async function getOrCreateRole(confID, priv) {
         }
     } catch (err) {
         console.log("Unable to create role")
-        console.log(err);
+        console.error(err);
         return null;
     }
     return roleCache[name];

@@ -16,11 +16,11 @@ var jwt = require('jsonwebtoken');
 Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE_JS_KEY, process.env.PARSE_MASTER_KEY);
 Parse.serverURL = 'https://parseapi.back4app.com/'
 
-async function getConfig(conference){
+async function getConfig(conference) {
     let configQ = new Parse.Query(InstanceConfig);
     configQ.equalTo("instance", conference);
     // configQ.cache(60);
-    let res = await configQ.find({useMasterKey: true});
+    let res = await configQ.find({ useMasterKey: true });
     let config = {};
     for (let obj of res) {
         config[obj.get("key")] = obj.get("value");
@@ -31,45 +31,47 @@ async function getConfig(conference){
     if (!config.TWILIO_CALLBACK_URL) {
         config.TWILIO_CALLBACK_URL = "https://clowdr.herokuapp.com/twilio/event"
     }
-    if(!config.TWILIO_CHAT_CHANNEL_MANAGER_ROLE){
+    if (!config.TWILIO_CHAT_CHANNEL_MANAGER_ROLE) {
         let role = await config.twilioChat.roles.create({
-            friendlyName :'clowdrAttendeeManagedChatParticipant',
+            friendlyName: 'clowdrAttendeeManagedChatParticipant',
             type: 'channel',
-            permission: ['addMember','deleteOwnMessage','editOwnMessage','editOwnMessageAttributes','inviteMember','leaveChannel','sendMessage','sendMediaMessage',
-                'editChannelName','editChannelAttributes']
+            permission: ['addMember', 'deleteOwnMessage', 'editOwnMessage', 'editOwnMessageAttributes', 'inviteMember', 'leaveChannel', 'sendMessage', 'sendMediaMessage',
+                'editChannelName', 'editChannelAttributes']
         })
         let newConf = new InstanceConfig();
         newConf.set("instance", conference);
-        newConf.set("key","TWILIO_CHAT_CHANNEL_MANAGER_ROLE");
+        newConf.set("key", "TWILIO_CHAT_CHANNEL_MANAGER_ROLE");
         newConf.set("value", role.sid);
-        await newConf.save({},{useMasterKey: true});
+        await newConf.save({}, { useMasterKey: true });
         config.TWILIO_CHAT_CHANNEL_MANAGER_ROLE = role.sid;
     }
-    if(!config.TWILIO_CHAT_CHANNEL_OBSERVER_ROLE){
+    if (!config.TWILIO_CHAT_CHANNEL_OBSERVER_ROLE) {
         let role = await config.twilioChat.roles.create({
-            friendlyName :'clowdrChatObserver',
+            friendlyName: 'clowdrChatObserver',
             type: 'channel',
             permission: ['deleteOwnMessage']
         })
         let newConf = new InstanceConfig();
         newConf.set("instance", conference);
-        newConf.set("key","TWILIO_CHAT_CHANNEL_OBSERVER_ROLE");
+        newConf.set("key", "TWILIO_CHAT_CHANNEL_OBSERVER_ROLE");
         newConf.set("value", role.sid);
-        await newConf.save({},{useMasterKey: true});
+        await newConf.save({}, { useMasterKey: true });
         config.TWILIO_CHAT_CHANNEL_OBSERVER_ROLE = role.sid;
     }
-    if(!config.TWILIO_ANNOUNCEMENTS_CHANNEL){
+    if (!config.TWILIO_ANNOUNCEMENTS_CHANNEL) {
         let attributes = {
             category: "announcements-global",
         }
         let chatRoom = await config.twilioChat.channels.create(
-            {friendlyName: "Announcements", type: "private",
-                attributes: JSON.stringify(attributes)});
+            {
+                friendlyName: "Announcements", type: "private",
+                attributes: JSON.stringify(attributes)
+            });
         let newConf = new InstanceConfig();
         newConf.set("instance", conference);
-        newConf.set("key","TWILIO_ANNOUNCEMENTS_CHANNEL");
+        newConf.set("key", "TWILIO_ANNOUNCEMENTS_CHANNEL");
         newConf.set("value", chatRoom.sid);
-        await newConf.save({},{useMasterKey: true});
+        await newConf.save({}, { useMasterKey: true });
         config.TWILIO_ANNOUNCEMENTS_CHANNEL = chatRoom.sid;
     }
     return config;
@@ -89,7 +91,7 @@ function generateRandomString(length) {
 
 let confQ = new Parse.Query(ClowdrInstance);
 confQ.equalTo("conferenceName", "ICFP 2020")
-confQ.find({useMasterKey: true}).then(async (confs) => {
+confQ.find({ useMasterKey: true }).then(async (confs) => {
     for (let conf of confs) {
         let config = await getConfig(conf);
         const payload = {
@@ -99,7 +101,7 @@ confQ.find({useMasterKey: true}).then(async (confs) => {
         const token = jwt.sign(payload, config.ZOOM_API_SECRET);
         let pwd = await generateRandomString(30);
         console.log(pwd);
-        for(let i = 1; i < 9; i++){
+        for (let i = 1; i < 9; i++) {
             let email = 'zoom+icfp' + i + "@clowdr.org";
             try {
                 let res = await axios({
@@ -121,8 +123,8 @@ confQ.find({useMasterKey: true}).then(async (confs) => {
                     }
                 });
                 console.log(res);
-            }catch(err){
-                console.log(err);
+            } catch (err) {
+                console.error(err);
                 console.log(config.ZOOM_API_KEY);
                 console.log(config.ZOOM_API_SECRET);
                 return;
@@ -131,13 +133,13 @@ confQ.find({useMasterKey: true}).then(async (confs) => {
             let acl = new Parse.ACL();
             acl.setPublicWriteAccess(false);
             acl.setPublicReadAccess(false);
-            acl.setRoleReadAccess(conf.id+"-admin", true);
+            acl.setRoleReadAccess(conf.id + "-admin", true);
             acl.setRoleReadAccess("ClowdrSysAdmin", true);
             account.setACL(acl);
             account.set("conference", conf);
             account.set("email", email);
             account.set("password", pwd);
-            await account.save({},{useMasterKey: true})
+            await account.save({}, { useMasterKey: true })
 
         }
     }

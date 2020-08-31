@@ -1,5 +1,6 @@
 # clowdr-backend
-Token server, Slack bot, REST services for Clowdr
+
+Token server and REST services for Clowdr
 
 ## Set up the environment variables
 
@@ -12,6 +13,13 @@ symbolic link to the .env file of the web app:
 ```bash
 $ ln -s ../clowdr-web-app/.env .env
 ```
+
+Under Windows, simply create a "hard link":
+
+```cmd
+mklink /H .env ..\clowdr-web-app\.env
+```
+
 If you are in another environment, simply copy that file to the root of this directory.
 
 ## Install and run
