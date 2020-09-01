@@ -767,7 +767,7 @@ async function createNewRoom(req, res) {
     // let confID = req.body.confid;
     let confID = req.body.conference;
     console.log("Create new room: Fetch conference")
-    conf = await getConferenceByID(confID);
+    let conf = await getConferenceByID(confID);
     if (!conf)
         console.log('Warn: Request did not include data to find the conference');
 
