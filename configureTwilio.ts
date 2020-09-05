@@ -26,6 +26,8 @@ Post Webhook URL present: ${!!postWebhookURL}
 
         const twilioClient = Twilio(accountSID, authToken);
         await twilioClient.chat.services(chatSID).update({
+            reachabilityEnabled: true,
+            readStatusEnabled: true,
             postWebhookUrl: postWebhookURL,
             webhookMethod: TWILIO_WEBHOOK_METHOD,
             webhookFilters: TWILIO_WEBHOOK_EVENTS
