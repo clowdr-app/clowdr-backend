@@ -9,21 +9,18 @@ var jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 const { videoToken, ChatGrant, AccessToken } = require('./tokens');
+import configureTwilio from './configureTwilio';
+
 const axios = require('axios');
 const qs = require('qs');
 
-var cors = require('cors')
+var cors = require('cors');
 
 const Twilio = require("twilio");
 
 
 Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE_JS_KEY, process.env.PARSE_MASTER_KEY);
 Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
-
-
-const masterTwilioClient = Twilio(process.env.TWILIO_MASTER_SID ? process.env.TWILIO_MASTER_SID : "AC123",
-    process.env.TWILIO_MASTER_AUTH_TOKEN ? process.env.TWILIO_MASTER_AUTH_TOKEN : "123");
-
 
 const app = express();
 app.use(cors())
@@ -474,12 +471,18 @@ async function getConfig(conf) {
     let q = new Parse.Query(InstanceConfig)
     q.equalTo("instance", conf);
     let res = await q.find({ useMasterKey: true });
-    let config = {};
+    let config: any = {};
     for (let obj of res) {
         config[obj.get("key")] = obj.get("value");
     }
     if (!config.FRONTEND_URL) {
         config.FRONTEND_URL = process.env.FRONTEND_URL;
+    }
+    if (!config.SHOULD_CONFIGURE_TWILIO) {
+        config.SHOULD_CONFIGURE_TWILIO = !!process.env.SHOULD_CONFIGURE_TWILIO;
+    }
+    if (!config.TWILIO_POST_WEBHOOK_URL) {
+        config.TWILIO_POST_WEBHOOK_URL = process.env.TWILIO_POST_WEBHOOK_URL;
     }
     if (!config.TWILIO_CALLBACK_URL) {
         config.TWILIO_CALLBACK_URL = process.env.TWILIO_CALLBACK_URL;
@@ -1213,7 +1216,7 @@ app.post('/chat/token', bodyParser.json(), bodyParser.urlencoded({ extended: fal
             let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
             let name = userProfile.id;
             let sessionID = sessionObj.id;
-            let now = new Date().getTime();
+            let now = Date.now();
             const chatGrant = new ChatGrant({
                 serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
                 endpointId: `${name}:browser:${sessionID}:${now}`
@@ -1399,7 +1402,10 @@ async function runBackend() {
             instances.forEach(
                 async (inst) => {
                     try {
-                        promises.push(getConferenceByID(inst.id).then((conf) => {
+                        promises.push(getConferenceByID(inst.id).then(async (conf) => {
+                            let config = await getConfig(conf);
+                            await configureTwilio(config);
+
                             console.log("Finished " + conf.get("conferenceName"))
                         }).catch(err => {
                             console.log("Unable to load data for  " + inst.get("conferenceName"))
@@ -1421,4 +1427,4 @@ async function runBackend() {
     });
 }
 
-runBackend();
+export default runBackend;
