@@ -245,7 +245,8 @@ async function getConferenceByID(confID) {
     let conf = await q.get(confID, { useMasterKey: true });
 
     await initChatRooms(conf);
-    confIDToConf[conf.id] = conf;
+    if (conf.config)
+        confIDToConf[conf.id] = conf;
 
     return conf;
 }
@@ -254,6 +255,10 @@ async function initChatRooms(r) {
     try {
         r.rooms = await populateActiveChannels(r);
         r.config = await getConfig(r);
+        if (r.config && r.config.length < 3) { // clearly incomplete
+            r.config = undefined;
+            return;
+        }
 
         try {
             r.twilio = Twilio(r.config.TWILIO_ACCOUNT_SID, r.config.TWILIO_AUTH_TOKEN);
@@ -1196,6 +1201,11 @@ app.post('/chat/token', bodyParser.json(), bodyParser.urlencoded({ extended: fal
         }
         console.log('[/chat/token]: conference: ' + JSON.stringify(req.body.conference));
         let conf = await getConferenceByID(req.body.conference);
+
+        if (!conf.config) {
+            res.send(JSON.stringify({ status: "Error", message: "Conference is not initialized" }));
+            return;
+        }
 
         try {
             const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
