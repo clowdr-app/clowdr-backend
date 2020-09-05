@@ -6,23 +6,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { platform } from 'os';
-import { spawn } from 'child_process';
+import * as ngrok from 'ngrok';
 
 // settings
 const pollInterval = 500;
-
-// needed for spawning NGROK
-let ngrokBin = '';
-let ngrokDir = '';
-let ngrokProc = '';
-try {
-    const ext = platform() === 'win32' ? '.exe' : '';
-    ngrokDir = path.dirname(require.resolve('ngrok')) + '/bin';
-    ngrokProc = 'ngrok' + ext;
-    ngrokBin = ngrokDir + '/' + ngrokProc;
-}
-catch { }
 
 async function ensureConnection(configName: string, configRelativePath: string): Promise<string | false> {
     const ngrokConfig = path.resolve(configRelativePath);
@@ -31,34 +18,19 @@ async function ensureConnection(configName: string, configRelativePath: string):
         return false;
     }
 
-    if (ngrokBin == '') {
-        console.log("Can't run ngrok - are dev dependencies installed?");
-        return false;
-    }
-
     console.log("Ensuring ngrok...");
-    return await connect(configName, configRelativePath);
+    return await connect(configName, ngrokConfig);
 }
 
-async function connect(configName: string, configRelativePath: string): Promise<string> {
+async function connect(configName: string, configAbsolutePath: string): Promise<string> {
     let url = await getNgrokUrl();
     if (url) {
         console.log("ngrok already running.");
         return url;
     }
 
-    process.stdout.write("Starting ngrok...");
-    startProcess(configName, configRelativePath);
-
-    while (true) {
-        process.stdout.write(".");
-        url = await getNgrokUrl();
-        if (url) {
-            process.stdout.write("url retrieved.\n");
-            return url;
-        }
-        await delay(pollInterval);
-    }
+    console.log("Starting ngrok...");
+    return startNgrok(configName, configAbsolutePath);
 }
 
 async function getNgrokUrl() {
@@ -76,29 +48,19 @@ async function getNgrokUrl() {
         await axios.get(url);
     }
     catch (ex) {
-        if (ex && ex.response && ex.response.status == "402") {
-            console.log("Killing expired tunnel...");
-            stopProcess();
-            await delay(2000);
-            return null;
-        }
     }
     return url;
 }
 
-function startProcess(configName: string, configRelativePath: string) {
-    const start = ['start', '-config=' + configRelativePath, configName];
-    const proc = spawn(ngrokBin, start, { cwd: ngrokDir, detached: false });
-    proc.unref();
+function startNgrok(configName: string, configAbsolutePath: string) {
+    return ngrok.connect({
+        configPath: configAbsolutePath,
+        name: configName
+    });
 }
 
-function stopProcess() {
-    const fkill = require('fkill');
-    fkill(ngrokProc, { force: true });
-}
-
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+export function stopNgrok() {
+    return ngrok.disconnect();
 }
 
 export default ensureConnection;
