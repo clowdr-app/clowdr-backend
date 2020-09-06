@@ -59,6 +59,7 @@ var globalSocialSpaces =[
     // "Posters",
     // "Breakout Rooms"
 ];
+
 async function createSocialSpaces(confName){
     let conf = await getConferenceByName(confName);
     for(let spaceName of globalSocialSpaces){
@@ -109,46 +110,47 @@ async function createSocialSpaces(confName){
     }
 
 }
-async function getOrCreateRole(confID, roleSuffix){
-    let conferencePrivQ = new Parse.Query(Parse.Role);
-    conferencePrivQ.equalTo("name",confID+"-"+roleSuffix);
-    let confPriv = await conferencePrivQ.first({useMasterKey: true});
-    if(!confPriv){
-        let roleACL = new Parse.ACL();
-        roleACL.setPublicReadAccess(true);
-        confPriv = new Parse.Role(confID+"-"+roleSuffix, roleACL);
-        await confPriv.save({},{useMasterKey: true});
-    }
-    return confPriv;
 
-}
-async function createDefaultRoles(conferenceName){
-    let conf = await getConferenceByName(conferenceName);
-    let confRole = await getOrCreateRole(conf.id,"conference")
-    let modRole = await getOrCreateRole(conf.id,"moderator")
-    let managerRole = await getOrCreateRole(conf.id,"manager")
-    let adminRole = await getOrCreateRole(conf.id,"admin")
+// async function getOrCreateRole(confID, roleSuffix){
+//     let conferencePrivQ = new Parse.Query(Parse.Role);
+//     conferencePrivQ.equalTo("name",confID+"-"+roleSuffix);
+//     let confPriv = await conferencePrivQ.first({useMasterKey: true});
+//     if(!confPriv){
+//         let roleACL = new Parse.ACL();
+//         roleACL.setPublicReadAccess(true);
+//         confPriv = new Parse.Role(confID+"-"+roleSuffix, roleACL);
+//         await confPriv.save({},{useMasterKey: true});
+//     }
+//     return confPriv;
+// }
 
-}
-const masterTwilioClient = Twilio(process.env.TWILIO_MASTER_SID, process.env.TWILIO_MASTER_AUTH_TOKEN);
-async function addOrReplaceConfig(installTo, key, value) {
-    if(!installTo.config){
-        installTo.config = {};
-    }
-    let existingTokenQ = new Parse.Query(ClowdrInstance);
-    existingTokenQ.equalTo("key", key);
-    existingTokenQ.equalTo("instance", installTo);
-    let tokenConfig = await existingTokenQ.first({}, {useMasterKey: true});
-    if (!tokenConfig) {
-        //Add the token
-        tokenConfig = new InstanceConfig();
-        tokenConfig.set("key", key);
-        tokenConfig.set("instance", installTo);
-    }
-    installTo.config[key] = value;
-    tokenConfig.set("value", value);
-    return tokenConfig.save({}, {useMasterKey: true});
-}
+// async function createDefaultRoles(conferenceName){
+//     let conf = await getConferenceByName(conferenceName);
+//     let confRole = await getOrCreateRole(conf.id,"conference")
+//     let modRole = await getOrCreateRole(conf.id,"moderator")
+//     let managerRole = await getOrCreateRole(conf.id,"manager")
+//     let adminRole = await getOrCreateRole(conf.id,"admin")
+
+// }
+
+// async function addOrReplaceConfig(installTo, key, value) {
+//     if(!installTo.config){
+//         installTo.config = {};
+//     }
+//     let existingTokenQ = new Parse.Query(ClowdrInstance);
+//     existingTokenQ.equalTo("key", key);
+//     existingTokenQ.equalTo("instance", installTo);
+//     let tokenConfig = await existingTokenQ.first({}, {useMasterKey: true});
+//     if (!tokenConfig) {
+//         //Add the token
+//         tokenConfig = new InstanceConfig();
+//         tokenConfig.set("key", key);
+//         tokenConfig.set("instance", installTo);
+//     }
+//     installTo.config[key] = value;
+//     tokenConfig.set("value", value);
+//     return tokenConfig.save({}, {useMasterKey: true});
+// }
 
 let confQ = new Parse.Query(ClowdrInstance);
 let conf = new ClowdrInstance();
