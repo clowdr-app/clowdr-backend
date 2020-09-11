@@ -27,11 +27,14 @@ If you are in another environment, simply copy that file to the root of this dir
 ```bash
 $ npm install
 ```
+
 ```bash
-$ npm start
+$ npm run ngrok
 ```
 
-## Enable chat webhooks for twilio
+## [DEPRECATED] Enable chat webhooks for twilio
+
+**As long as you've set your Twilio keys up in `.env` correctly, `npm run ngrok` should do everything for you.**
 
 We use a webhook from twilio to track who is online.
 
@@ -44,16 +47,16 @@ Also, should ngrok be mentioned earlier?
 
 From there:
 
-* Base configuration -> check `Reachability enabled` and `Message read
-  status`
+- Base configuration -> check `Reachability enabled` and `Message read status`
 
-* Webhooks -> Post event webhook, callback URL is your backend server
+- Webhooks -> Post event webhook, callback URL is your backend server
   e.g. https://xxxxx.ngrok.io/twilio/chat/event , HTTP-POST method,
   `onUserUpdated` event only.
 
-* Save
+- Save
 
 If you are in a development environment, rather than production, you may need to set up a tunnel for Twilio to reach your server. Ngrok will work. Install it and run
+
 ```bash
 $ ngrok http 3001
 ```
