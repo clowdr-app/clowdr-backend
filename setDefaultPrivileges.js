@@ -18,7 +18,7 @@ var privilegeRoles = {
 
 };
 let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
-let InstancePermission = Parse.Object.extend("InstancePermission");
+let ConferencePermission = Parse.Object.extend("ConferencePermission");
 
 var adminRole;
 
@@ -58,19 +58,19 @@ async function createPrivileges() {
 }
 
 createPrivileges().then(async (res) => {
-    let confsQ = new Parse.Query("ClowdrInstance");
+    let confsQ = new Parse.Query("Conference");
     let confs = await confsQ.find({ useMasterKey: true });
 
     Promise.all(confs.map(async (conf) => {
         let promises = [];
         for (let action of Object.values(privilegeRoles)) {
-            let permissionQ = new Parse.Query(InstancePermission);
+            let permissionQ = new Parse.Query(ConferencePermission);
             permissionQ.equalTo("conference", conf);
             permissionQ.equalTo("action", action);
             let priv = await permissionQ.first({ useMasterKey: true });
             if (!priv) {
                 console.log("Creating")
-                priv = new InstancePermission();
+                priv = new ConferencePermission();
                 priv.set("conference", conf);
                 priv.set("action", action);
                 let acl = new Parse.ACL();
@@ -124,7 +124,7 @@ async function getOrCreateRole(confID, priv) {
     }
     return roleCache[name];
 }
-let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
+let Conference = Parse.Object.extend("Conference");
 
 // async function fn()
 // {
@@ -132,7 +132,7 @@ let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
 //     console.log(modRole)
 //     let userQuery = modRole.getUsers().query();
 //     let profilesQuery = new Parse.Query("UserProfile");
-//     let conf = new ClowdrInstance()
+//     let conf = new Conference()
 //     conf.id = "WWumDSYBTx";
 //     profilesQuery.equalTo("conference", conf);
 //     profilesQuery.matchesQuery("user", userQuery);

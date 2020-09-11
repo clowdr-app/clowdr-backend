@@ -6,7 +6,7 @@ Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE
 Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
 
 
-let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
+let Conference = Parse.Object.extend("Conference");
 let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
 
 var privilegeRoles = {
@@ -39,7 +39,7 @@ async function createPrivileges() {
 async function runBackend() {
     let promises = [];
     await createPrivileges();
-    let query = new Parse.Query(ClowdrInstance);
+    let query = new Parse.Query(Conference);
     query.find({ useMasterKey: true }).then((instances) => {
         instances.forEach(
             async (inst) => {

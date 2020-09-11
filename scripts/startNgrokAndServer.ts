@@ -21,7 +21,7 @@ export default async function startNgrokServer() {
         // conference's database - you have been warned.
         console.log(`Configuring environment.
     Note: Settings will be overriden by values in each conference's database
-          (see Instance Configuration). If stuff doesn't work as expected, check
+          (see Conference Configuration). If stuff doesn't work as expected, check
           values there first.`);
         process.env.SHOULD_CONFIGURE_TWILIO = "true";
         process.env.TWILIO_POST_WEBHOOK_URL = ngrokUrl + TWILIO_CHAT_EVENT_URL;

@@ -30,13 +30,13 @@ const userToAuthData = {};
 const userToWorkspaces = {};
 var sidToRoom = {};
 
-let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
-let ClowdrInstanceAccess = Parse.Object.extend("ClowdrInstanceAccess");
+let Conference = Parse.Object.extend("Conference");
+let ConferenceAccess = Parse.Object.extend("ConferenceAccess");
 
-let InstanceConfig = Parse.Object.extend("InstanceConfiguration");
+let ConferenceConfig = Parse.Object.extend("ConferenceConfiguration");
 let BreakoutRoom = Parse.Object.extend("BreakoutRoom");
 let PrivilegedAction = Parse.Object.extend("PrivilegedAction");
-var InstancePermission = Parse.Object.extend("InstancePermission");
+var ConferencePermission = Parse.Object.extend("ConferencePermission");
 let LiveActivity = Parse.Object.extend("LiveActivity");
 let UserProfile = Parse.Object.extend("UserProfile");
 let BondedChannel = Parse.Object.extend("BondedChannel");
@@ -238,7 +238,7 @@ function getAllUsers() {
 async function getConferenceByID(confID) {
     if (confIDToConf[confID])
         return confIDToConf[confID];
-    let q = new Parse.Query(ClowdrInstance);
+    let q = new Parse.Query(Conference);
     let conf = await q.get(confID, { useMasterKey: true });
 
     await initChatRooms(conf);
@@ -275,11 +275,11 @@ async function initChatRooms(r) {
         r.lobbySocialSpace = await socialSpaceQ.first({ useMasterKey: true });
 
         //Make sure that there is a record of the instance for enrollments
-        let accessQ = new Parse.Query(ClowdrInstanceAccess);
+        let accessQ = new Parse.Query(ConferenceAccess);
         accessQ.equalTo("conference", r);
         let accessRecord = await accessQ.first({ useMasterKey: true });
         if (!accessRecord) {
-            accessRecord = new ClowdrInstanceAccess();
+            accessRecord = new ConferenceAccess();
             let role = await getOrCreateRole(r.id, "conference");
             let acl = new Parse.ACL();
             try {
@@ -468,7 +468,7 @@ async function pushToUserStream(parseUser, parseConference, topic) {
 
 }
 async function getConfig(conf) {
-    let q = new Parse.Query(InstanceConfig)
+    let q = new Parse.Query(ConferenceConfig)
     q.equalTo("conference", conf);
     let res = await q.find({ useMasterKey: true });
     let config: any = {};
@@ -728,13 +728,13 @@ async function addOrReplaceConfig(installTo, key, value) {
     if (!installTo.config) {
         installTo.config = {};
     }
-    let existingTokenQ = new Parse.Query(ClowdrInstance);
+    let existingTokenQ = new Parse.Query(Conference);
     existingTokenQ.equalTo("key", key);
     existingTokenQ.equalTo("conference", installTo);
     let tokenConfig = await existingTokenQ.first({}, { useMasterKey: true });
     if (!tokenConfig) {
         //Add the token
-        tokenConfig = new InstanceConfig();
+        tokenConfig = new ConferenceConfig();
         tokenConfig.set("key", key);
         tokenConfig.set("conference", installTo);
     }
@@ -803,7 +803,7 @@ async function createNewRoom(req, res) {
         if (session) {
             let parseUser = session.get("user");
             //Validate has privileges for conference
-            const accesToConf = new Parse.Query(InstancePermission);
+            const accesToConf = new Parse.Query(ConferencePermission);
             accesToConf.equalTo("conference", conf);
             accesToConf.equalTo("action", privilegeRoles['createVideoRoom']);
             console.log('--> ' + JSON.stringify(privilegeRoles['createVideoRoom']));
@@ -1276,7 +1276,7 @@ app.post('/video/deleteRoom', bodyParser.json(), bodyParser.urlencoded({ extende
     const roomID = req.body.room;
     let conf = await getConferenceByID(req.body.conference);
     try {
-        // const accesToConf = new Parse.Query(InstancePermission);
+        // const accesToConf = new Parse.Query(ConferencePermission);
         // accesToConf.equalTo("conference", conf);
         // accesToConf.equalTo("action", privilegeRoles['moderator']);
         // const hasAccess = await accesToConf.first({sessionToken: identity});
@@ -1317,7 +1317,7 @@ app.post('/users/ban', bodyParser.json(), bodyParser.urlencoded({ extended: fals
     const isBan = req.body.isBan;
     let conf = await getConferenceByID(req.body.conference);
     try {
-        // const accesToConf = new Parse.Query(InstancePermission);
+        // const accesToConf = new Parse.Query(ConferencePermission);
         // accesToConf.equalTo("conference", conf);
         // accesToConf.equalTo("action", privilegeRoles['moderator']);
         const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
@@ -1397,7 +1397,7 @@ async function runBackend() {
     await getPrivileges();
 
     if (!process.env.SKIP_INIT) {
-        let query = new Parse.Query(ClowdrInstance);
+        let query = new Parse.Query(Conference);
         query.find({ useMasterKey: true }).then((instances) => {
             instances.forEach(
                 async (inst) => {

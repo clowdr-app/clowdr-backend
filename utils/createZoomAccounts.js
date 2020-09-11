@@ -2,13 +2,13 @@ const crypto = require('crypto');
 
 const fs = require("fs");
 const Parse = require("parse/node");
-let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
+let Conference = Parse.Object.extend("Conference");
 require('dotenv').config()
 
 let ZoomRoom = Parse.Object.extend("ZoomRoom");
 let ZoomHostAccount = Parse.Object.extend("ZoomHostAccount");
 
-let InstanceConfig = Parse.Object.extend("InstanceConfiguration");
+let ConferenceConfig = Parse.Object.extend("ConferenceConfiguration");
 const Twilio = require("twilio");
 const axios = require('axios');
 var jwt = require('jsonwebtoken');
@@ -17,7 +17,7 @@ Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE
 Parse.serverURL = 'https://parseapi.back4app.com/'
 
 async function getConfig(conference) {
-    let configQ = new Parse.Query(InstanceConfig);
+    let configQ = new Parse.Query(ConferenceConfig);
     configQ.equalTo("conference", conference);
     // configQ.cache(60);
     let res = await configQ.find({ useMasterKey: true });
@@ -38,7 +38,7 @@ async function getConfig(conference) {
             permission: ['addMember', 'deleteOwnMessage', 'editOwnMessage', 'editOwnMessageAttributes', 'inviteMember', 'leaveChannel', 'sendMessage', 'sendMediaMessage',
                 'editChannelName', 'editChannelAttributes']
         })
-        let newConf = new InstanceConfig();
+        let newConf = new ConferenceConfig();
         newConf.set("conference", conference);
         newConf.set("key", "TWILIO_CHAT_CHANNEL_MANAGER_ROLE");
         newConf.set("value", role.sid);
@@ -51,7 +51,7 @@ async function getConfig(conference) {
             type: 'channel',
             permission: ['deleteOwnMessage']
         })
-        let newConf = new InstanceConfig();
+        let newConf = new ConferenceConfig();
         newConf.set("conference", conference);
         newConf.set("key", "TWILIO_CHAT_CHANNEL_OBSERVER_ROLE");
         newConf.set("value", role.sid);
@@ -67,7 +67,7 @@ async function getConfig(conference) {
                 friendlyName: "Announcements", type: "private",
                 attributes: JSON.stringify(attributes)
             });
-        let newConf = new InstanceConfig();
+        let newConf = new ConferenceConfig();
         newConf.set("conference", conference);
         newConf.set("key", "TWILIO_ANNOUNCEMENTS_CHANNEL");
         newConf.set("value", chatRoom.sid);
@@ -89,7 +89,7 @@ function generateRandomString(length) {
     })
 }
 
-let confQ = new Parse.Query(ClowdrInstance);
+let confQ = new Parse.Query(Conference);
 confQ.equalTo("conferenceName", "ICFP 2020")
 confQ.find({ useMasterKey: true }).then(async (confs) => {
     for (let conf of confs) {

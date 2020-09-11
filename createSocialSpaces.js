@@ -4,13 +4,13 @@ const Twilio = require("twilio");
 const Parse = require("parse/node");
 Parse.initialize(process.env.REACT_APP_PARSE_APP_ID, process.env.REACT_APP_PARSE_JS_KEY, process.env.PARSE_MASTER_KEY);
 Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
-let ClowdrInstance = Parse.Object.extend("ClowdrInstance");
+let Conference = Parse.Object.extend("Conference");
 
-let InstanceConfig = Parse.Object.extend("InstanceConfiguration");
+let ConferenceConfig = Parse.Object.extend("ConferenceConfiguration");
 let SocialSpace = Parse.Object.extend("SocialSpace");
 
 async function getConfig(conf) {
-    let q = new Parse.Query(InstanceConfig)
+    let q = new Parse.Query(ConferenceConfig)
     q.equalTo("conference", conf);
     let res = await q.find({useMasterKey: true});
     let config = {};
@@ -35,7 +35,7 @@ async function getConfig(conf) {
 }
 
 async function getConferenceByName(confName){
-    let q = new Parse.Query(ClowdrInstance);
+    let q = new Parse.Query(Conference);
     let r = undefined;
     try {
         q.equalTo("conferenceName", confName);
@@ -137,13 +137,13 @@ async function createSocialSpaces(confName){
 //     if(!installTo.config){
 //         installTo.config = {};
 //     }
-//     let existingTokenQ = new Parse.Query(ClowdrInstance);
+//     let existingTokenQ = new Parse.Query(Conference);
 //     existingTokenQ.equalTo("key", key);
 //     existingTokenQ.equalTo("conference", installTo);
 //     let tokenConfig = await existingTokenQ.first({}, {useMasterKey: true});
 //     if (!tokenConfig) {
 //         //Add the token
-//         tokenConfig = new InstanceConfig();
+//         tokenConfig = new ConferenceConfig();
 //         tokenConfig.set("key", key);
 //         tokenConfig.set("conference", installTo);
 //     }
@@ -152,8 +152,8 @@ async function createSocialSpaces(confName){
 //     return tokenConfig.save({}, {useMasterKey: true});
 // }
 
-let confQ = new Parse.Query(ClowdrInstance);
-let conf = new ClowdrInstance();
+let confQ = new Parse.Query(Conference);
+let conf = new Conference();
 conf.id = "8XdrQ9yIIy";
 confQ.equalTo("conference",conf)
 confQ.find({useMasterKey: true}).then( async(confs)=>{
