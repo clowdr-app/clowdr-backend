@@ -18,7 +18,7 @@ Parse.serverURL = 'https://parseapi.back4app.com/'
 
 async function getConfig(conference) {
     let configQ = new Parse.Query(InstanceConfig);
-    configQ.equalTo("instance", conference);
+    configQ.equalTo("conference", conference);
     // configQ.cache(60);
     let res = await configQ.find({ useMasterKey: true });
     let config = {};
@@ -39,7 +39,7 @@ async function getConfig(conference) {
                 'editChannelName', 'editChannelAttributes']
         })
         let newConf = new InstanceConfig();
-        newConf.set("instance", conference);
+        newConf.set("conference", conference);
         newConf.set("key", "TWILIO_CHAT_CHANNEL_MANAGER_ROLE");
         newConf.set("value", role.sid);
         await newConf.save({}, { useMasterKey: true });
@@ -52,7 +52,7 @@ async function getConfig(conference) {
             permission: ['deleteOwnMessage']
         })
         let newConf = new InstanceConfig();
-        newConf.set("instance", conference);
+        newConf.set("conference", conference);
         newConf.set("key", "TWILIO_CHAT_CHANNEL_OBSERVER_ROLE");
         newConf.set("value", role.sid);
         await newConf.save({}, { useMasterKey: true });
@@ -68,7 +68,7 @@ async function getConfig(conference) {
                 attributes: JSON.stringify(attributes)
             });
         let newConf = new InstanceConfig();
-        newConf.set("instance", conference);
+        newConf.set("conference", conference);
         newConf.set("key", "TWILIO_ANNOUNCEMENTS_CHANNEL");
         newConf.set("value", chatRoom.sid);
         await newConf.save({}, { useMasterKey: true });

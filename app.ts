@@ -276,7 +276,7 @@ async function initChatRooms(r) {
 
         //Make sure that there is a record of the instance for enrollments
         let accessQ = new Parse.Query(ClowdrInstanceAccess);
-        accessQ.equalTo("instance", r);
+        accessQ.equalTo("conference", r);
         let accessRecord = await accessQ.first({ useMasterKey: true });
         if (!accessRecord) {
             accessRecord = new ClowdrInstanceAccess();
@@ -284,7 +284,7 @@ async function initChatRooms(r) {
             let acl = new Parse.ACL();
             try {
                 acl.setRoleReadAccess(r.id + "-conference", true);
-                accessRecord.set("instance", r);
+                accessRecord.set("conference", r);
                 accessRecord.setACL(acl);
                 await accessRecord.save({}, { useMasterKey: true });
             } catch (err) {
@@ -469,7 +469,7 @@ async function pushToUserStream(parseUser, parseConference, topic) {
 }
 async function getConfig(conf) {
     let q = new Parse.Query(InstanceConfig)
-    q.equalTo("instance", conf);
+    q.equalTo("conference", conf);
     let res = await q.find({ useMasterKey: true });
     let config: any = {};
     for (let obj of res) {
@@ -730,13 +730,13 @@ async function addOrReplaceConfig(installTo, key, value) {
     }
     let existingTokenQ = new Parse.Query(ClowdrInstance);
     existingTokenQ.equalTo("key", key);
-    existingTokenQ.equalTo("instance", installTo);
+    existingTokenQ.equalTo("conference", installTo);
     let tokenConfig = await existingTokenQ.first({}, { useMasterKey: true });
     if (!tokenConfig) {
         //Add the token
         tokenConfig = new InstanceConfig();
         tokenConfig.set("key", key);
-        tokenConfig.set("instance", installTo);
+        tokenConfig.set("conference", installTo);
     }
     installTo.config[key] = value;
     tokenConfig.set("value", value);

@@ -11,7 +11,7 @@ let SocialSpace = Parse.Object.extend("SocialSpace");
 
 async function getConfig(conf) {
     let q = new Parse.Query(InstanceConfig)
-    q.equalTo("instance", conf);
+    q.equalTo("conference", conf);
     let res = await q.find({useMasterKey: true});
     let config = {};
     for (let obj of res) {
@@ -139,13 +139,13 @@ async function createSocialSpaces(confName){
 //     }
 //     let existingTokenQ = new Parse.Query(ClowdrInstance);
 //     existingTokenQ.equalTo("key", key);
-//     existingTokenQ.equalTo("instance", installTo);
+//     existingTokenQ.equalTo("conference", installTo);
 //     let tokenConfig = await existingTokenQ.first({}, {useMasterKey: true});
 //     if (!tokenConfig) {
 //         //Add the token
 //         tokenConfig = new InstanceConfig();
 //         tokenConfig.set("key", key);
-//         tokenConfig.set("instance", installTo);
+//         tokenConfig.set("conference", installTo);
 //     }
 //     installTo.config[key] = value;
 //     tokenConfig.set("value", value);
