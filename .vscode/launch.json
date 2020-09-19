@@ -5,10 +5,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch server via NPM",
+            "name": "Launch Ngrok server via NPM",
             "request": "launch",
             "runtimeArgs": [
-                "start"
+                "run",
+                "ngrok"
             ],
             "runtimeExecutable": "npm",
             "skipFiles": [
@@ -17,11 +18,10 @@
             "type": "pwa-node"
         },
         {
-            "name": "Launch Ngrok server via NPM",
+            "name": "Launch server via NPM",
             "request": "launch",
             "runtimeArgs": [
-                "run",
-                "ngrok"
+                "start"
             ],
             "runtimeExecutable": "npm",
             "skipFiles": [

@@ -1,30 +1,48 @@
-const Twilio = require('twilio');
+import Twilio from 'twilio';
+import { ClowdrConfig } from './Config';
+import assert from "assert";
 
 const TWILIO_WEBHOOK_METHOD = 'POST';
 const TWILIO_WEBHOOK_EVENTS = ['onUserUpdated'];
 
-async function configureTwilio(config) {
+const twilioClientCache = new Map<string, Twilio.Twilio>();
+export async function getTwilioClient(confId: string, config: ClowdrConfig): Promise<Twilio.Twilio> { 
+    let result = twilioClientCache.get(confId);
+    if (result) {
+        return result;
+    }
+
+    const accountSID = config.TWILIO_ACCOUNT_SID;
+    const authToken = config.TWILIO_AUTH_TOKEN;
+
+    assert(accountSID);
+    assert(authToken);
+
+    result = Twilio(accountSID, authToken);
+    twilioClientCache.set(confId, result);
+    return result;
+}
+
+export async function configureTwilio(confId: string, config: ClowdrConfig) {
+    const twilioClient = await getTwilioClient(confId, config);
+
     if (config.SHOULD_CONFIGURE_TWILIO) {
         console.log("Attempting to configure Twilio...");
 
-        const accountSID = config.TWILIO_ACCOUNT_SID;
-        const authToken = config.TWILIO_AUTH_TOKEN;
+        // TODO: Create a subaccount and initialize the various services
+        //       then save the new SIDs etc back into the conference config
+
         const chatSID = config.TWILIO_CHAT_SERVICE_SID;
         const postWebhookURL = config.TWILIO_POST_WEBHOOK_URL;
 
-        if (!accountSID ||
-            !authToken ||
-            !chatSID ||
+        if (!chatSID ||
             !postWebhookURL) {
             throw new Error(`Could not configure Twilio - required information not available!
-Account SID present: ${!!accountSID}
-Auth token present: ${!!authToken}
 Chat SID present: ${!!chatSID}
 Post Webhook URL present: ${!!postWebhookURL}
             `);
         }
 
-        const twilioClient = Twilio(accountSID, authToken);
         await twilioClient.chat.services(chatSID).update({
             reachabilityEnabled: true,
             readStatusEnabled: true,
@@ -37,5 +55,3 @@ Post Webhook URL present: ${!!postWebhookURL}
         console.log("Skipping configuring Twilio.");
     }
 }
-
-export default configureTwilio;

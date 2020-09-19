@@ -44,7 +44,7 @@ async function runBackend() {
         instances.forEach(
             async (inst) => {
                 try {
-                    promises.push(getConferenceByID(inst.id).then((conf) => {
+                    promises.push(getConference(inst.id).then((conf) => {
                         console.log("Finished " + conf.get("conferenceName"))
                     }).catch(err => {
                         console.log("Unable to load data for  " + inst.get("conferenceName"))

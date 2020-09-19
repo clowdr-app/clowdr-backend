@@ -1,0 +1,107 @@
+swagger: "2.0"
+info:
+  description: "The clowdr-backend API provides endpoints for Twilio operations."
+  version: "1.0.0"
+  title: "Clowdr Twilio Backend"
+  termsOfService: ""
+  contact:
+    email: "ed@ednutting.com"
+  license:
+    name: "BSD 3-Clause"
+    url: "https://github.com/clowdr-app/clowdr-backend/blob/develop/LICENSE"
+basePath: "/"
+tags:
+- name: "chat"
+  description: "Text Chat Endpoints"
+  externalDocs:
+    description: "Documentation on Twilio"
+    url: "https://www.twilio.com/docs/chat/"
+- name: "video"
+  description: "Video Room Endpoints"
+  externalDocs:
+    description: "Documentation on Twilio"
+    url: "https://www.twilio.com/docs/video/"
+- name: "users"
+  description: "User Endpoints"
+  externalDocs:
+    description: "Documentation on Twilio"
+    url: "https://www.twilio.com/docs/user/"
+- name: "twilio"
+  description: "Twilio callbacks"
+schemes:
+- "https"
+paths:
+  /chat/token:
+    post:
+      tags:
+        - "chat"
+      summary: "Generates or retrieves a chat token for one of our users."
+      description: ""
+      operationId: "getToken"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: ""
+        required: true
+        schema:
+          type: "object"
+          required:
+            - "identity"
+            - "conference"
+          properties:
+            identity:
+              type: "string"
+              description: "The user's session token."
+            conference:
+              type: "string"
+              description: "The conference id."
+      responses:
+        "200":
+          description: "Token provided"
+  /twilio/event:
+    post:
+        tags: 
+          - "twilio"
+        responses:
+          200:
+            description: ""
+  /video/new:
+    post:
+      tags:
+        - "video"
+      summary: "Creates a new video room if permitted"
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        description: ""
+        required: true
+        schema:
+          type: "object"
+          required:
+            - "identity"
+            - "conference"
+            - "visibility"
+          properties:
+            identity:
+              type: "string"
+              description: "The user's session token."
+            conference:
+              type: "string"
+              description: "The conference id."
+            visibility:
+              type: "string"
+              description: "Room visibility: 'public' or 'private'"
+      responses:
+        200:
+          description: ""
+externalDocs:
+  description: "Clowdr Backend on Github"
+  url: "https://github.com/clowdr-app/clowdr-backend"

@@ -134,7 +134,6 @@ confQ.find({ useMasterKey: true }).then(async (confs) => {
             acl.setPublicWriteAccess(false);
             acl.setPublicReadAccess(false);
             acl.setRoleReadAccess(conf.id + "-admin", true);
-            acl.setRoleReadAccess("ClowdrSysAdmin", true);
             account.setACL(acl);
             account.set("conference", conf);
             account.set("email", email);

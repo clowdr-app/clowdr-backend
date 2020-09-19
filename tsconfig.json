@@ -1,0 +1,41 @@
+{
+    "compilerOptions": {
+        "target": "es6",
+        "allowJs": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
+        "strict": true,
+        "sourceMap": true,
+        "forceConsistentCasingInFileNames": true,
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": false,
+        "noImplicitReturns": true,
+        "downlevelIteration": true,
+        "outDir": "build",
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictPropertyInitialization": true,
+        "noImplicitThis": true,
+        "alwaysStrict": true,
+        "suppressImplicitAnyIndexErrors": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+    },
+    "include": [
+        "src"
+    ],
+    "typeRoots": [
+        "./src/types",
+        "./node_modules/@types"
+    ],
+    "exclude": [
+        "**/test/**/*",
+        "**/tests/**/*"
+    ]
+}
