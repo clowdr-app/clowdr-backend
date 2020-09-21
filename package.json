@@ -15,7 +15,7 @@
     "mongodb": "^3.5.8",
     "node-env-run": "^3.0.2",
     "nodemon": "^2.0.4",
-    "parse": "^2.13.0",
+    "parse": "^2.16.0",
     "ts-node": "^9.0.0",
     "twilio": "^3.44.0",
     "twilio-video": "^2.4.0",
@@ -28,9 +28,9 @@
     ]
   },
   "scripts": {
-    "dev": "node-env-run ./src/run.ts --exec \"nodemon\"",
-    "start": "node-env-run ./src/run.ts --exec \"ts-node\"",
-    "ngrok": "node-env-run ./scripts/startNgrokAndServer.ts --exec \"ts-node\""
+    "dev": "node-env-run -E .env ./src/run.ts --exec \"nodemon\"",
+    "start": "node-env-run -E .env ./src/run.ts --exec \"ts-node\"",
+    "ngrok": "node-env-run -E .env ./scripts/startNgrokAndServer.ts --exec \"ts-node\""
   },
   "homepage": "https://icse2020.clowdr.org/",
   "devDependencies": {

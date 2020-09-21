@@ -2,8 +2,6 @@ import Twilio from 'twilio';
 import { ClowdrConfig } from './Config';
 import assert from "assert";
 
-const TWILIO_WEBHOOK_METHOD = 'POST';
-const TWILIO_WEBHOOK_EVENTS = ['onUserUpdated'];
 
 const twilioClientCache = new Map<string, Twilio.Twilio>();
 export async function getTwilioClient(confId: string, config: ClowdrConfig): Promise<Twilio.Twilio> { 
@@ -23,32 +21,49 @@ export async function getTwilioClient(confId: string, config: ClowdrConfig): Pro
     return result;
 }
 
+// Copied from clowdr-web-app/backend/cloud/conference.js
+// - also update there when modifying.
+const TWILIO_WEBHOOK_EVENTS = [
+    "onMemberAdd",
+    "onMemberAdded",
+    "onMessageSent",
+    "onMessageUpdated",
+    "onMessageRemoved",
+    "onMediaMessageSent",
+    "onChannelUpdated",
+    "onChannelDestroyed",
+];
+
 export async function configureTwilio(confId: string, config: ClowdrConfig) {
     const twilioClient = await getTwilioClient(confId, config);
 
     if (config.SHOULD_CONFIGURE_TWILIO) {
         console.log("Attempting to configure Twilio...");
 
-        // TODO: Create a subaccount and initialize the various services
-        //       then save the new SIDs etc back into the conference config
-
         const chatSID = config.TWILIO_CHAT_SERVICE_SID;
-        const postWebhookURL = config.TWILIO_POST_WEBHOOK_URL;
+        const preWebhookURL
+            = config.TWILIO_CHAT_PRE_WEBHOOK_URL === "<unknown>"
+                ? "" : config.TWILIO_CHAT_PRE_WEBHOOK_URL;
+        const postWebhookURL
+            = config.TWILIO_CHAT_POST_WEBHOOK_URL === "<unknown>"
+                ? "" : config.TWILIO_CHAT_POST_WEBHOOK_URL;
 
         if (!chatSID ||
+            !preWebhookURL ||
             !postWebhookURL) {
             throw new Error(`Could not configure Twilio - required information not available!
 Chat SID present: ${!!chatSID}
-Post Webhook URL present: ${!!postWebhookURL}
+Pre Webhook URL present: ${!!preWebhookURL}
+Post Webhook URL present: ${!!preWebhookURL}
             `);
         }
 
+        // Note: A partial reconfiguration - we need a better way to keep this in sync
+        //       with the conference creation in the parse-server backend (see conference.js).
         await twilioClient.chat.services(chatSID).update({
-            reachabilityEnabled: true,
-            readStatusEnabled: true,
+            preWebhookUrl: preWebhookURL,
             postWebhookUrl: postWebhookURL,
-            webhookMethod: TWILIO_WEBHOOK_METHOD,
-            webhookFilters: TWILIO_WEBHOOK_EVENTS
+            webhookFilters: TWILIO_WEBHOOK_EVENTS,
         }).then(service => console.log(`Updated Twilio Chat Service: ${service.friendlyName}`));
     }
     else {

@@ -62,7 +62,7 @@ paths:
       responses:
         "200":
           description: "Token provided"
-  /twilio/event:
+  /twilio/chat/event:
     post:
         tags: 
           - "twilio"

@@ -1,7 +1,9 @@
-import Parse from "parse";
+import Parse from "parse/node";
+import { Enqueue } from "twilio/lib/twiml/VoiceResponse";
 import { getConfig } from "./Config";
 import { initChatRooms } from "./InitConference";
-import { Conference, ConferenceT } from "./SchemaTypes";
+import { Conference, ConferenceT, User, UserT, UserProfile, UserProfileT } from "./SchemaTypes";
+import { configureTwilio } from "./Twilio";
 
 export async function getSession(token: string): Promise<Parse.Session | null> {
     let query = new Parse.Query(Parse.Session);
@@ -26,28 +28,30 @@ export async function getConference(id: string): Promise<ConferenceT> {
     conferenceCache.set(id, result);
 
     // Initialise config cache for this conference
-    await getConfig(result.id);
+    const config = await getConfig(result.id);
+    // Initialise Twilio if necessary
+    await configureTwilio(result.id, config);
     // Initialise the conference if it has not already been
     await initChatRooms(result);
 
     return result;
 }
 
-// async function getUserProfile(uid, conf) {
-//     let cacheKey = uid + "-" + conf.id;
-//     console.log(cacheKey)
-//     if (!uidToProfileCache[cacheKey]) {
-//         let uq = new Parse.Query(UserProfile);
-//         let fauxUser = new Parse.User();
-//         fauxUser.id = uid;
-//         uq.equalTo("user", fauxUser);
-//         uq.equalTo("conference", conf);
-//         let res = await uq.first({ useMasterKey: true });
-//         console.log(res);
-//         uidToProfileCache[cacheKey] = res;
-//     }
-//     return uidToProfileCache[cacheKey];
-// }
+export async function getUserProfile(user: UserT, conf: ConferenceT): Promise<UserProfileT | undefined> {
+    let uq = new Parse.Query(UserProfile);
+    uq.equalTo("user", user);
+    uq.equalTo("conference", conf);
+    return uq.first({ useMasterKey: true });
+}
+
+export async function getUserProfileByID(userId: string, conf: ConferenceT): Promise<UserProfileT | undefined> {
+    let uq = new Parse.Query(UserProfile);
+    let fauxUser = new User();
+    fauxUser.id = userId;
+    uq.equalTo("user", fauxUser);
+    uq.equalTo("conference", conf);
+    return uq.first({ useMasterKey: true });
+}
 
 
 // var allUsersPromise;

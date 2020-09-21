@@ -1,5 +1,5 @@
 import Twilio from 'twilio';
-import ClowdrConfig from './Config';
+import { ClowdrConfig } from './Config';
 
 const AccessToken = Twilio.jwt.AccessToken;
 export const { VideoGrant, ChatGrant } = AccessToken;

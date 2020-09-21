@@ -1,5 +1,5 @@
 import ngrok, { stopNgrok } from './ngrok';
-import runBackend from '../app';
+import runBackend from '../src/app';
 
 const TWILIO_CHAT_EVENT_URL = "/twilio/chat/event";
 const NGROK_STRIP_HHTPS = true;
@@ -24,7 +24,8 @@ export default async function startNgrokServer() {
           (see Conference Configuration). If stuff doesn't work as expected, check
           values there first.`);
         process.env.SHOULD_CONFIGURE_TWILIO = "true";
-        process.env.TWILIO_POST_WEBHOOK_URL = ngrokUrl + TWILIO_CHAT_EVENT_URL;
+        process.env.TWILIO_CHAT_PRE_WEBHOOK_URL = ngrokUrl + TWILIO_CHAT_EVENT_URL;
+        process.env.TWILIO_CHAT_POST_WEBHOOK_URL = ngrokUrl + TWILIO_CHAT_EVENT_URL;
 
         // Start the server
         runBackend().catch((err) => {

@@ -7,17 +7,15 @@ import CORS from 'cors';
 import BodyParser from "body-parser";
 // import Twilio from "twilio";
 // import JWT from 'jsonwebtoken';
-import AccessToken from "twilio/lib/jwt/AccessToken";
 
-import { getSession, getConference } from "./ParseHelpers";
+import { getSession, getConference, getUserProfile } from "./ParseHelpers";
 
 // import moment from "moment";
 // import crypto from "crypto";
 
-import { videoToken, ChatGrant } from "./tokens";
+import { videoToken, ChatGrant, generateToken } from "./tokens";
 import { configureTwilio } from './Twilio';
 
-// import axios from 'axios';
 // import qs from 'qs';
 import {
     Conference, ConferenceT,
@@ -30,64 +28,67 @@ import { getConfig } from "./Config";
 
 import * as Video from "./Video";
 
-
-// Check we have all the required environment keys for Parse
-assert(process.env.REACT_APP_PARSE_APP_ID,
-    "REACT_APP_PARSE_APP_ID not provided.");
-assert(process.env.REACT_APP_PARSE_JS_KEY,
-    "REACT_APP_PARSE_JS_KEY not provided.");
-assert(process.env.PARSE_MASTER_KEY,
-    "PARSE_MASTER_KEY not provided.");
-assert(process.env.REACT_APP_PARSE_DATABASE_URL,
-    "REACT_APP_PARSE_DATABASE_URL not provided.");
-
-// Initialise Parse
-Parse.initialize(
-    process.env.REACT_APP_PARSE_APP_ID,
-    process.env.REACT_APP_PARSE_JS_KEY,
-    process.env.PARSE_MASTER_KEY
-);
-Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
-
 // Initialise the Express app
 const app = Express();
 // Cross-Origin Resource Sharing
 app.use(CORS());
 
+// TODO: This app has to initialise and pick up whatever conference state has
+// formed inside Twilio and make our data match up. E.g. chats and video rooms
+// may have been created while this was offline, or a request might come in for
+// a conference we haven't seen yet.
+// It also needs to be able to configure conferences to use ngrok at first
+// startup.
+
+// TODO: 'onMemberAdd' to Announcements channel
+//       - set role (according to admin status) by sending 'modify' response
+//         back to Twilio
+
+// TODO: 'onMemberAdded' for detecting sticky-shift into 'large channel' mode
+
+// TODO: 'onMessageSent' / 'onMessageUpdated' / 'onMessageRemoved' / 'onMediaMessageSent'
+//       for (large) channel mirroring
+
+// TODO: 'onChannelUpdated' / 'onChannelDestroyed' for (large) channel mirroring
+
+// TODO: Make sure any existing conference's chat service are configured with the
+//       above hooks list.
+// TODO: How do we keep the above hooks list consistent with the 'create conference' code?
 
 /**********************
  * Twilio callback(s) *
  **********************/
 
 async function processTwilioEvent(req: Express.Request, res: Express.Response) {
-    let roomSID = req.body.RoomSid;
-    console.log("Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid)
-    try {
-        if (req.body.StatusCallbackEvent === 'room-ended') {
-            let roomQ = new Parse.Query(VideoRoom);
-            roomQ.equalTo("twilioID", roomSID);
-            let room = await roomQ.first({ useMasterKey: true });
-            if (room) {
-                if (!room.get("ephemeral")) {
-                    console.log(`Removing Twilio room ID for ${room.get("name")}`)
-                    room.set("twilioID", "");
-                    await room.save({}, { useMasterKey: true });
-                } else {
-                    await room.destroy({ useMasterKey: true });
-                }
-            } else {
-                console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
-            }
-        }
-    } catch (err) {
-        console.error("Error processing Twilio event", err);
-    }
+    //     let roomSID = req.body.RoomSid;
+    //     console.log("Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid)
+    //     try {
+    //         if (req.body.StatusCallbackEvent === 'room-ended') {
+    //             let roomQ = new Parse.Query(VideoRoom);
+    //             roomQ.equalTo("twilioID", roomSID);
+    //             let room = await roomQ.first({ useMasterKey: true });
+    //             if (room) {
+    //                 if (!room.get("ephemeral")) {
+    //                     console.log(`Removing Twilio room ID for ${room.get("name")}`)
+    //                     room.set("twilioID", "");
+    //                     await room.save({}, { useMasterKey: true });
+    //                 } else {
+    //                     await room.destroy({ useMasterKey: true });
+    //                 }
+    //             } else {
+    //                 console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
+    //             }
+    //         }
+    //     } catch (err) {
+    //         console.error("Error processing Twilio event", err);
+    //     }
 
-    console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
+    //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
+
+    res.send();
 }
 
-app.post("/twilio/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-    res.send();
+app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
         await processTwilioEvent(req, res);
     } catch (e) {
@@ -100,76 +101,76 @@ app.post("/twilio/event", BodyParser.json(), BodyParser.urlencoded({ extended: f
  * Moderation endpoints *
  ************************/
 
-app.post("/moderator/fromVideo", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-    try {
-        await sendModeratorMessage(req, res);
-    } catch (err) {
-        res.status(500);
-        res.send({ status: "error", message: "An internal server error occurred." })
-        console.error(err);
-    }
-})
+// app.post("/moderator/fromVideo", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
+//     try {
+//         await sendModeratorMessage(req, res);
+//     } catch (err) {
+//         res.status(500);
+//         res.send({ status: "error", message: "An internal server error occurred." })
+//         console.error(err);
+//     }
+// })
 
-app.post("/video/acl", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-    await updateACL(req, res);
-})
+// app.post("/video/acl", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
+//     await updateACL(req, res);
+// })
 
-app.post('/users/ban', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
-    const identity = req.body.identity;
-    const profileToBan = req.body.profileID;
-    const isBan = req.body.isBan;
-    let conf = await getConference(req.body.conference);
-    try {
-        const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
-        if (!hasAccess) {
-            res.status(403);
-            res.send();
-            return;
-        }
-        let profileQ = new Parse.Query(UserProfile);
-        profileQ.include("user");
-        let profile = await profileQ.get(profileToBan, { useMasterKey: true });
-        if (isBan) {
-            profile.set("isBanned", true);
-            let bannedACL = new Parse.ACL();
-            bannedACL.setWriteAccess(profile.get("user"), false);
-            bannedACL.setRoleReadAccess(conf.id + "-conference", true);
-            profile.setACL(bannedACL);
-            await profile.save({}, { useMasterKey: true });
+// app.post('/users/ban', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
+//     const identity = req.body.identity;
+//     const profileToBan = req.body.profileID;
+//     const isBan = req.body.isBan;
+//     let conf = await getConference(req.body.conference);
+//     try {
+//         const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
+//         if (!hasAccess) {
+//             res.status(403);
+//             res.send();
+//             return;
+//         }
+//         let profileQ = new Parse.Query(UserProfile);
+//         profileQ.include("user");
+//         let profile = await profileQ.get(profileToBan, { useMasterKey: true });
+//         if (isBan) {
+//             profile.set("isBanned", true);
+//             let bannedACL = new Parse.ACL();
+//             bannedACL.setWriteAccess(profile.get("user"), false);
+//             bannedACL.setRoleReadAccess(conf.id + "-conference", true);
+//             profile.setACL(bannedACL);
+//             await profile.save({}, { useMasterKey: true });
 
-            //Deny user read access to their own record
-            let user = profile.get("user");
-            let bannedUserACL = new Parse.ACL();
-            user.setACL(bannedUserACL);
-            await user.save({}, { useMasterKey: true });
-        } else {
-            profile.set("isBanned", false);
-            let notBannedACL = new Parse.ACL();
-            notBannedACL.setWriteAccess(profile.get("user"), true);
-            notBannedACL.setRoleReadAccess(conf.id + "-conference", true);
+//             //Deny user read access to their own record
+//             let user = profile.get("user");
+//             let bannedUserACL = new Parse.ACL();
+//             user.setACL(bannedUserACL);
+//             await user.save({}, { useMasterKey: true });
+//         } else {
+//             profile.set("isBanned", false);
+//             let notBannedACL = new Parse.ACL();
+//             notBannedACL.setWriteAccess(profile.get("user"), true);
+//             notBannedACL.setRoleReadAccess(conf.id + "-conference", true);
 
-            profile.setACL(notBannedACL);
-            await profile.save({}, { useMasterKey: true });
-            let user = profile.get("user");
+//             profile.setACL(notBannedACL);
+//             await profile.save({}, { useMasterKey: true });
+//             let user = profile.get("user");
 
-            let userACL = new Parse.ACL();
-            userACL.setWriteAccess(user, true);
-            userACL.setReadAccess(user, true);
-            user.setACL(userACL);
-            await user.save({}, { useMasterKey: true });
+//             let userACL = new Parse.ACL();
+//             userACL.setWriteAccess(user, true);
+//             userACL.setReadAccess(user, true);
+//             user.setACL(userACL);
+//             await user.save({}, { useMasterKey: true });
 
-        }
-        await pushToUserStream(profile.get("user"), conf, "profile");
-        res.send({ status: "OK" });
-    } catch (err) {
-        res.status(500);
-        console.error(err);
-        res.send({ status: "error", message: "Internal server error, please check logs" })
-    }
-    // newNode[uid] = true;
-    // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
-    // });
-});
+//         }
+//         await pushToUserStream(profile.get("user"), conf, "profile");
+//         res.send({ status: "OK" });
+//     } catch (err) {
+//         res.status(500);
+//         console.error(err);
+//         res.send({ status: "error", message: "Internal server error, please check logs" })
+//     }
+//     // newNode[uid] = true;
+//     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
+//     // });
+// });
 
 
 /******************
@@ -185,34 +186,39 @@ app.post('/chat/token',
             let sessionObj = await getSession(identity);
             if (!sessionObj) {
                 res.status(403);
-                res.send({ status: "Invalid token" })
+                res.send({ status: "Invalid session token." })
                 return;
             }
             console.log(`[/chat/token]: conference: ${JSON.stringify(req.body.conference)}`);
-            let conf = await getConference(req.body.conference);
-
-            if (!conf.config) {
-                res.send(JSON.stringify({ status: "Error", message: "Conference is not initialized" }));
+            const conf = await getConference(req.body.conference);
+            const config = await getConfig(conf.id);
+            if (!config) {
+                res.send(JSON.stringify({ status: "Error", message: "Could not get conference configuration." }));
                 return;
             }
 
             try {
-                const accessToken = new AccessToken(conf.config.TWILIO_ACCOUNT_SID, conf.config.TWILIO_API_KEY, conf.config.TWILIO_API_SECRET,
-                    { ttl: 3600 * 24 });
-                let userProfile = await getUserProfile(sessionObj.get("user").id, conf);
-                let name = userProfile.id;
+                let userProfile = await getUserProfile(sessionObj.get("user"), conf);
+                if (!userProfile) {
+                    res.send(JSON.stringify({ status: "Error", message: "Permission denied." }));
+                    return;
+                }
+
+                let identity = userProfile.id;
                 let sessionID = sessionObj.id;
                 let now = Date.now();
                 const chatGrant = new ChatGrant({
-                    serviceSid: conf.config.TWILIO_CHAT_SERVICE_SID,
-                    endpointId: `${name}:browser:${sessionID}:${now}`
+                    serviceSid: config.TWILIO_CHAT_SERVICE_SID,
+                    endpointId: `${identity}:browser:${sessionID}:${now}`
                 });
+
+                // TODO: Put Twilio token TTL (time-to-live) into configuration in database
+                const accessToken = generateToken(config, identity, 3600 * 3);
                 accessToken.addGrant(chatGrant);
-                accessToken.identity = name;
                 res.set('Content-Type', 'application/json');
                 res.send(JSON.stringify({
                     token: accessToken.toJwt(),
-                    identity: name
+                    identity: identity
                 }));
             } catch (err) {
                 res.send(JSON.stringify({ status: "Error", message: err }));
@@ -223,84 +229,83 @@ app.post('/chat/token',
         }
     });
 
-// TODO: Can't we control this through Twilio permissions?
-app.post('/chat/deleteMessage', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
-    const identity = req.body.identity;
-    const messageSID = req.body.message;
-    const channelSID = req.body.room;
-    try {
-        const hasAccess = await sessionTokenIsFromModerator(identity, req.body.conference);
-        let conf = await getConference(req.body.conference);
-        if (!hasAccess) {
-            res.status(403);
-            res.send();
-            return;
-        }
-        let chat = await conf.Twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).channels(channelSID).messages(messageSID).remove();
-        res.send({ status: "OK" });
-    } catch (err) {
-        next(err);
-    }
-    // newNode[uid] = true;
-    // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
-    // });
-});
+// // TODO: Can't we control this through Twilio permissions?
+// app.post('/chat/deleteMessage', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
+//     const identity = req.body.identity;
+//     const messageSID = req.body.message;
+//     const channelSID = req.body.room;
+//     try {
+//         const hasAccess = await sessionTokenIsFromModerator(identity, req.body.conference);
+//         let conf = await getConference(req.body.conference);
+//         if (!hasAccess) {
+//             res.status(403);
+//             res.send();
+//             return;
+//         }
+//         let chat = await conf.Twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID).channels(channelSID).messages(messageSID).remove();
+//         res.send({ status: "OK" });
+//     } catch (err) {
+//         next(err);
+//     }
+//     // newNode[uid] = true;
+//     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
+//     // });
+// });
 
 
 /*******************
  * Video endpoints *
  *******************/
 
-app.post("/video/token", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-    try {
-        await mintTokenForFrontend(req, res);
-    } catch (err) {
-        console.log("Not found when minting")
-        console.error(err);
-        res.status(500);
-        res.send({ status: "error", message: "Internal server error" });
-    }
-});
+// app.post("/video/token", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
+//     try {
+//         await mintTokenForFrontend(req, res);
+//     } catch (err) {
+//         console.log("Not found when minting")
+//         console.error(err);
+//         res.status(500);
+//         res.send({ status: "error", message: "Internal server error" });
+//     }
+// });
 
-app.post("/video/new", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-    return await Video.createNewRoom(req, res);
-});
+// app.post("/video/new", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
+//     return await Video.createNewRoom(req, res);
+// });
 
-// TODO: Can't we control this through Twilio permissions?
-app.post('/video/deleteRoom', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
-    const identity = req.body.identity;
-    const roomID = req.body.room;
-    let conf = await getConference(req.body.conference);
-    try {
-        const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
-        if (!hasAccess) {
-            res.status(403);
-            res.send();
-            return;
-        }
-        //First, remove all users.
-        let roomQ = new Parse.Query(BreakoutRoom);
-        let room = await roomQ.get(roomID, { useMasterKey: true });
-        if (!room) {
-            console.log("Unable to find room:" + roomID)
-        }
-        let promises = [];
-        if (room.get("members")) {
-            for (let member of room.get("members")) {
-                console.log("Kick: " + member.id);
-                promises.push(removeFromCall(conf.Twilio, room.get("twilioID"), member.id));
-            }
-        }
-        await Promise.all(promises);
-        await room.destroy({ useMasterKey: true });
-        res.send({ status: "OK" });
-    } catch (err) {
-        next(err);
-    }
-    // newNode[uid] = true;
-    // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
-    // });
-});
+// app.post('/video/deleteRoom', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
+//     const identity = req.body.identity;
+//     const roomID = req.body.room;
+//     let conf = await getConference(req.body.conference);
+//     try {
+//         const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
+//         if (!hasAccess) {
+//             res.status(403);
+//             res.send();
+//             return;
+//         }
+//         //First, remove all users.
+//         let roomQ = new Parse.Query(BreakoutRoom);
+//         let room = await roomQ.get(roomID, { useMasterKey: true });
+//         if (!room) {
+//             console.log("Unable to find room:" + roomID)
+//         }
+//         let promises = [];
+//         if (room.get("members")) {
+//             for (let member of room.get("members")) {
+//                 console.log("Kick: " + member.id);
+//                 promises.push(removeFromCall(conf.Twilio, room.get("twilioID"), member.id));
+//             }
+//         }
+//         await Promise.all(promises);
+//         await room.destroy({ useMasterKey: true });
+//         res.send({ status: "OK" });
+//     } catch (err) {
+//         next(err);
+//     }
+//     // newNode[uid] = true;
+//     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
+//     // });
+// });
 
 
 
@@ -309,25 +314,41 @@ app.post('/video/deleteRoom', BodyParser.json(), BodyParser.urlencoded({ extende
  **********/
 
 async function runBackend() {
+    // Check we have all the required environment keys for Parse
+    assert(process.env.REACT_APP_PARSE_APP_ID,
+        "REACT_APP_PARSE_APP_ID not provided.");
+    assert(process.env.REACT_APP_PARSE_JS_KEY,
+        "REACT_APP_PARSE_JS_KEY not provided.");
+    assert(process.env.PARSE_MASTER_KEY,
+        "PARSE_MASTER_KEY not provided.");
+    assert(process.env.REACT_APP_PARSE_DATABASE_URL,
+        "REACT_APP_PARSE_DATABASE_URL not provided.");
+
+    // Initialise Parse
+    Parse.initialize(
+        process.env.REACT_APP_PARSE_APP_ID,
+        process.env.REACT_APP_PARSE_JS_KEY,
+        process.env.PARSE_MASTER_KEY
+    );
+    Parse.serverURL = process.env.REACT_APP_PARSE_DATABASE_URL;
+
     let promises: Array<Promise<any>> = [];
 
-    if (!process.env.SKIP_INIT) {
+    if ((process.env.TWILIO_BACKEND_SKIP_INIT || "false") === "false") {
         let query = new Parse.Query(Conference);
         query.find({ useMasterKey: true }).then((instances) => {
-            instances.forEach(
-                async (inst) => {
+            promises = instances.map(
+                async (conf) => {
+                    const name = conf.get("name");
                     try {
-                        promises.push(getConference(inst.id).then(async (conf) => {
-                            let config = await getConfig(conf.id);
-                            await configureTwilio(conf.id, config);
-
-                            console.log("Finished " + conf.get("name"))
-                        }).catch(err => {
-                            console.error("Unable to load data for  " + inst.get("name"), err);
-                        }));
+                        // Just 'getting' the conference is sufficient to trigger
+                        // configuration - very side effectful.
+                        await getConference(conf.id);
+                        console.log(`Loaded ${name}.`);
                     } catch (err) {
-                        console.error(err);
+                        console.error(`Loading ${name} failed.`);
                     }
+                    console.log("==========================================");
                 }
             )
         }).catch((err) => {

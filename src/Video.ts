@@ -69,7 +69,6 @@ export async function createNewRoom(req: Express.Request, res: Express.Response)
                     let maxParticipants = (mode === "peer-to-peer" ? 10 : (mode === "group-small" ? 4 : 10));
                     let twilioRoom = await twilio.video.rooms.create({
                         type: mode,
-                        // type: conf.config.TWILIO_ROOM_TYPE,
                         uniqueName: roomName,
                         maxParticipants: maxParticipants,
                         statusCallback: conf.config.TWILIO_CALLBACK_URL

@@ -1,12 +1,11 @@
 import { ConferenceT } from "./SchemaTypes";
 
-
-async function populateActiveChannels(conf: ConferenceT) {
-    let roomQuery = new Parse.Query(VideoRoom);
-    roomQuery.equalTo("conference", conf);
-    let rooms = await roomQuery.find({ useMasterKey: true });
-    return rooms;
-}
+// async function populateActiveChannels(conf: ConferenceT) {
+//     let roomQuery = new Parse.Query(VideoRoom);
+//     roomQuery.equalTo("conference", conf);
+//     let rooms = await roomQuery.find({ useMasterKey: true });
+//     return rooms;
+// }
 
 export async function initChatRooms(r: ConferenceT) {
     // TODO: initChatRooms
