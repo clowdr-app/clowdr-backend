@@ -189,7 +189,6 @@ app.post('/chat/token',
                 res.send({ status: "Invalid session token." })
                 return;
             }
-            console.log(`[/chat/token]: conference: ${JSON.stringify(req.body.conference)}`);
             const conf = await getConference(req.body.conference);
             const config = await getConfig(conf.id);
             if (!config) {
@@ -203,6 +202,8 @@ app.post('/chat/token',
                     res.send(JSON.stringify({ status: "Error", message: "Permission denied." }));
                     return;
                 }
+
+                console.log(`[/chat/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id})`);
 
                 let identity = userProfile.id;
                 let sessionID = sessionObj.id;
