@@ -214,12 +214,14 @@ app.post('/chat/token',
                 });
 
                 // TODO: Put Twilio token TTL (time-to-live) into configuration in database
-                const accessToken = generateToken(config, identity, 3600 * 3);
+                let expiryDistanceSeconds = 3600 * 3;
+                const accessToken = generateToken(config, identity, expiryDistanceSeconds);
                 accessToken.addGrant(chatGrant);
                 res.set('Content-Type', 'application/json');
                 res.send(JSON.stringify({
                     token: accessToken.toJwt(),
-                    identity: identity
+                    identity: identity,
+                    expiry: new Date().getTime() + (expiryDistanceSeconds * 1000)
                 }));
             } catch (err) {
                 res.send(JSON.stringify({ status: "Error", message: err }));
