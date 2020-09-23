@@ -2,7 +2,7 @@
 
 import assert from "assert";
 import Parse from "parse/node";
-import Express from 'express';
+import Express, { Request, Response, NextFunction } from 'express';
 import CORS from 'cors';
 import BodyParser from "body-parser";
 // import Twilio from "twilio";
@@ -23,10 +23,9 @@ import {
     TextChat, TextChatT,
     VideoRoom, VideoRoomT
 } from "./SchemaTypes";
-import { RoleNames } from "clowdr-db-schema/src/classes/DataLayer/Schema/_Role";
-import { getConfig } from "./Config";
 
 import * as Video from "./Video";
+import { handleCreateChat, handleGenerateFreshToken } from "./Chat";
 
 // Initialise the Express app
 const app = Express();
@@ -180,68 +179,12 @@ app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extend
 app.post('/chat/token',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
-    async (req, res, next) => {
-        try {
-            const identity = req.body.identity;
-            let sessionObj = await getSession(identity);
-            if (!sessionObj) {
-                res.status(403);
-                res.send({ status: "Invalid session token." })
-                return;
-            }
-            const conf = await getConference(req.body.conference);
-            const config = await getConfig(conf.id);
-            if (!config) {
-                res.send(JSON.stringify({ status: "Error", message: "Could not get conference configuration." }));
-                return;
-            }
-
-            try {
-                let userProfile = await getUserProfile(sessionObj.get("user"), conf);
-                if (!userProfile) {
-                    res.send(JSON.stringify({ status: "Error", message: "Permission denied." }));
-                    return;
-                }
-
-                console.log(`${new Date().toUTCString()} [/chat/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id})`);
-
-                let identity = userProfile.id;
-                let sessionID = sessionObj.id;
-                let now = Date.now();
-                const chatGrant = new ChatGrant({
-                    serviceSid: config.TWILIO_CHAT_SERVICE_SID,
-                    endpointId: `${identity}:browser:${sessionID}:${now}`
-                });
-
-                // TODO: Put Twilio token TTL (time-to-live) into configuration in database
-                let expiryDistanceSeconds = 3600 * 3;
-                const accessToken = generateToken(config, identity, expiryDistanceSeconds);
-                accessToken.addGrant(chatGrant);
-                res.set('Content-Type', 'application/json');
-                res.send(JSON.stringify({
-                    token: accessToken.toJwt(),
-                    identity: identity,
-                    expiry: new Date().getTime() + (expiryDistanceSeconds * 1000)
-                }));
-            } catch (err) {
-                res.send(JSON.stringify({ status: "Error", message: err }));
-            }
-        } catch (err) {
-            next(err);
-        }
-    });
+    handleGenerateFreshToken);
 
 app.post('/chat/create',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
-    async (req, res, next) => {
-        try {
-            
-        }
-        catch (e) {
-            next(e);
-        }
-    });
+    handleCreateChat);
 
 // // TODO: Can't we control this through Twilio permissions?
 // app.post('/chat/deleteMessage', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
