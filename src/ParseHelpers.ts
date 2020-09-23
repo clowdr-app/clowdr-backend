@@ -44,7 +44,18 @@ export async function getUserProfile(user: UserT, conf: ConferenceT): Promise<Us
     return uq.first({ useMasterKey: true });
 }
 
-export async function getUserProfileByID(userId: string, conf: ConferenceT): Promise<UserProfileT | undefined> {
+export async function getUserProfileByID(profileId: string, conf: ConferenceT): Promise<UserProfileT | undefined> {
+    let uq = new Parse.Query(UserProfile);
+    uq.equalTo("conference", conf);
+    try {
+        return await uq.get(profileId, { useMasterKey: true });
+    }
+    catch (e) {
+        return undefined;
+    }
+}
+
+export async function getUserProfileByUserID(userId: string, conf: ConferenceT): Promise<UserProfileT | undefined> {
     let uq = new Parse.Query(UserProfile);
     let fauxUser = new User();
     fauxUser.id = userId;

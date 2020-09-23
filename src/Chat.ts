@@ -94,7 +94,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
             }
         }
 
-        if (mode !== "public" || mode !== "private") {
+        if (mode !== "public" && mode !== "private") {
             res.status(400);
             res.send({ status: "Mode should be 'public' or 'private'." });
             return;
@@ -171,6 +171,9 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
             }));
 
             try {
+                // TODO: Users must be registered in Twilio before we can create
+                //       members or invites (in particular, invites fail).
+
                 await callWithRetry(() => newChannel.members().create({
                     identity: userProfile.id,
                     roleSid: isDM ? channelUserRole.sid : channelAdminRole.sid
@@ -183,11 +186,15 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
                     }));
                 }));
 
+                console.log(`Created channel '${friendlyName}' (${newChannel.sid})`);
+
                 res.status(200);
                 res.send({ channelSID: newChannel.sid });
                 return;
             }
             catch (e) {
+                console.error("Could not create channel", e);
+
                 await callWithRetry(() => newChannel.remove());
 
                 res.status(500);
