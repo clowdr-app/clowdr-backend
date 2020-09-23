@@ -181,8 +181,8 @@ app.post('/chat/token',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
     async (req, res, next) => {
-        const identity = req.body.identity;
         try {
+            const identity = req.body.identity;
             let sessionObj = await getSession(identity);
             if (!sessionObj) {
                 res.status(403);
@@ -226,9 +226,20 @@ app.post('/chat/token',
             } catch (err) {
                 res.send(JSON.stringify({ status: "Error", message: err }));
             }
-
         } catch (err) {
             next(err);
+        }
+    });
+
+app.post('/chat/create',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    async (req, res, next) => {
+        try {
+            
+        }
+        catch (e) {
+            next(e);
         }
     });
 
