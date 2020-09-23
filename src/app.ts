@@ -203,7 +203,7 @@ app.post('/chat/token',
                     return;
                 }
 
-                console.log(`[/chat/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id})`);
+                console.log(`${new Date().toUTCString()} [/chat/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id})`);
 
                 let identity = userProfile.id;
                 let sessionID = sessionObj.id;
