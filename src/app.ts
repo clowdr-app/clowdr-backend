@@ -54,6 +54,8 @@ app.use(CORS());
 //       above hooks list.
 // TODO: How do we keep the above hooks list consistent with the 'create conference' code?
 
+// TODO: 'onUserAdded' - ensure role and friendly name are set correctly
+
 /**********************
  * Twilio callback(s) *
  **********************/

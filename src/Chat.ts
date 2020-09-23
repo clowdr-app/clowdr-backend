@@ -10,6 +10,7 @@ import { UserProfileT } from './SchemaTypes';
 
 import uuid from "uuid";
 import assert from "assert";
+import { ServiceContext } from 'twilio/lib/rest/chat/v2/service';
 
 export async function handleGenerateFreshToken(req: Request, res: Response, next: NextFunction) {
     try {
@@ -42,6 +43,20 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
     } catch (err) {
         next(err);
     }
+}
+
+async function ensureTwilioUsersExist(service: ServiceContext, profiles: Array<UserProfileT>) {
+    let existingUserProfileIds = (await service.users.list()).map(x => x.identity);
+    await Promise.all(profiles.map(x => {
+        if (!existingUserProfileIds.includes(x.id)) {
+            // TODO: Rely on `onUserAdded` to set their service-level role correctly (e.g. for admin users)
+            return service.users.create({
+                identity: x.id,
+                friendlyName: x.get("displayName")
+            });
+        }
+        return null;
+    }));
 }
 
 /**
@@ -171,8 +186,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
             }));
 
             try {
-                // TODO: Users must be registered in Twilio before we can create
-                //       members or invites (in particular, invites fail).
+                await ensureTwilioUsersExist(service, [...userProfilesToInvite, userProfile]);
 
                 await callWithRetry(() => newChannel.members().create({
                     identity: userProfile.id,
