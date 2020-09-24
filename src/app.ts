@@ -51,6 +51,7 @@ app.use(CORS());
 // TODO: 'onChannelUpdated' / 'onChannelDestroyed' for (large) channel mirroring
 
 // TODO: 'onUserAdded' - ensure role and friendly name are set correctly
+//                     - ensure they are a member of the announcements channel
 
 // TODO: Make sure any existing conference's chat service are configured with the
 //       above hooks list.
