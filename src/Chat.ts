@@ -151,6 +151,10 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         const attributes = {
             isDM: isDM
         };
+        if (isDM) {
+            attributes["member1"] = userProfile.id;
+            attributes["member2"] = userProfilesToInvite[0].id;
+        }
 
         const accountSID = config.TWILIO_ACCOUNT_SID;
         const accountAuth = config.TWILIO_AUTH_TOKEN;
