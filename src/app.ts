@@ -46,15 +46,16 @@ app.use(CORS());
 // TODO: 'onMemberAdded' for detecting sticky-shift into 'large channel' mode
 
 // TODO: 'onMessageSent' / 'onMessageUpdated' / 'onMessageRemoved' / 'onMediaMessageSent'
-//       for (large) channel mirroring
+//       for (large) channel mirroring (set webhook per-channel)
 
 // TODO: 'onChannelUpdated' / 'onChannelDestroyed' for (large) channel mirroring
+
+// TODO: 'onUserAdded' - ensure role and friendly name are set correctly
 
 // TODO: Make sure any existing conference's chat service are configured with the
 //       above hooks list.
 // TODO: How do we keep the above hooks list consistent with the 'create conference' code?
 
-// TODO: 'onUserAdded' - ensure role and friendly name are set correctly
 
 /**********************
  * Twilio callback(s) *
