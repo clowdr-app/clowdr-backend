@@ -26,10 +26,10 @@ export async function getTwilioClient(confId: string, config: ClowdrConfig): Pro
 const TWILIO_WEBHOOK_EVENTS = [
     "onMemberAdd",
     "onMemberAdded",
-    "onMessageSent",
-    "onMessageUpdated",
-    "onMessageRemoved",
-    "onMediaMessageSent",
+    // Per-channel webhooks: "onMessageSent",
+    // Per-channel webhooks: "onMessageUpdated",
+    // Per-channel webhooks: "onMessageRemoved",
+    // Per-channel webhooks: "onMediaMessageSent",
     "onChannelUpdated",
     "onChannelDestroyed",
 ];

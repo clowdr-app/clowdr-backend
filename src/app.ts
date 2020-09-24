@@ -88,11 +88,13 @@ async function processTwilioEvent(req: Express.Request, res: Express.Response) {
 
     //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
 
-    res.send();
+    res.status(200);
+    res.send({});
 }
 
 app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
+        console.log(`${req.body.StatusCallbackEvent} event received for: ${req.body.RoomSid}`);
         await processTwilioEvent(req, res);
     } catch (e) {
         console.log(e);

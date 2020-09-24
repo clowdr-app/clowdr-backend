@@ -6,7 +6,7 @@ const NGROK_STRIP_HHTPS = true;
 
 export default async function startNgrokServer() {
     // Start ngrok
-    let ngrokUrl = await ngrok("twilio-backend", "scripts/ngrok.yml");
+    let ngrokUrl = await ngrok();
     if (ngrokUrl) {
         if (NGROK_STRIP_HHTPS) {
             if (ngrokUrl.startsWith("https://")) {

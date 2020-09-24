@@ -11,18 +11,12 @@ import * as ngrok from 'ngrok';
 // settings
 const pollInterval = 500;
 
-async function ensureConnection(configName: string, configRelativePath: string): Promise<string | false> {
-    const ngrokConfig = path.resolve(configRelativePath);
-    if (!fs.existsSync(ngrokConfig)) {
-        console.log(`Can't run ngrok - missing ${ngrokConfig}.`);
-        return false;
-    }
-
+async function ensureConnection(): Promise<string | false> {
     console.log("Ensuring ngrok...");
-    return await connect(configName, ngrokConfig);
+    return await connect();
 }
 
-async function connect(configName: string, configAbsolutePath: string): Promise<string> {
+async function connect(): Promise<string> {
     let url = await getNgrokUrl();
     if (url) {
         console.log("ngrok already running.");
@@ -30,7 +24,7 @@ async function connect(configName: string, configAbsolutePath: string): Promise<
     }
 
     console.log("Starting ngrok...");
-    return startNgrok(configName, configAbsolutePath);
+    return startNgrok();
 }
 
 async function getNgrokUrl() {
@@ -52,10 +46,10 @@ async function getNgrokUrl() {
     return url;
 }
 
-function startNgrok(configName: string, configAbsolutePath: string) {
+function startNgrok() {
     return ngrok.connect({
-        configPath: configAbsolutePath,
-        name: configName
+        addr: 3001,
+        proto: "http"
     });
 }
 
