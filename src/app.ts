@@ -62,7 +62,7 @@ app.use(CORS());
  * Twilio callback(s) *
  **********************/
 
-async function processTwilioEvent(req: Express.Request, res: Express.Response) {
+async function processTwilioChatEvent(req: Express.Request, res: Express.Response) {
     //     let roomSID = req.body.RoomSid;
     //     console.log("Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid)
     //     try {
@@ -94,8 +94,8 @@ async function processTwilioEvent(req: Express.Request, res: Express.Response) {
 
 app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
-        console.log(`${req.body.StatusCallbackEvent} event received for: ${req.body.RoomSid}`);
-        await processTwilioEvent(req, res);
+        console.log(`${req.body.EventType} event received for: ${req.body.ChannelSid}`);
+        await processTwilioChatEvent(req, res);
     } catch (e) {
         console.log(e);
     }
