@@ -11,6 +11,7 @@ export type ClowdrConfig = {
     TWILIO_ACCOUNT_SID: string;
     TWILIO_AUTH_TOKEN: string;
     TWILIO_CHAT_SERVICE_SID: string;
+    TWILIO_ANNOUNCEMENTS_CHANNEL_SID: string;
 
     REACT_APP_TWILIO_CALLBACK_URL: string;
     REACT_APP_FRONTEND_URL: string;

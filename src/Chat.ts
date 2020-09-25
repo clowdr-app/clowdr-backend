@@ -225,3 +225,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         next(e);
     }
 }
+
+// TODO: We have to control channel user roles by setting them at the time of
+//       invite / add so we need to control 'invite user'/'add member' through
+//       the backend

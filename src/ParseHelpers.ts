@@ -2,8 +2,9 @@ import Parse from "parse/node";
 import { Enqueue } from "twilio/lib/twiml/VoiceResponse";
 import { getConfig } from "./Config";
 import { initChatRooms } from "./InitConference";
-import { Conference, ConferenceT, User, UserT, UserProfile, UserProfileT } from "./SchemaTypes";
+import { Conference, ConferenceT, User, UserT, UserProfile, UserProfileT, RoleT, Role } from "./SchemaTypes";
 import { configureTwilio } from "./Twilio";
+import assert from "assert";
 
 export async function getSession(token: string): Promise<Parse.Session | null> {
     let query = new Parse.Query(Parse.Session);
@@ -44,9 +45,11 @@ export async function getUserProfile(user: UserT, conf: ConferenceT): Promise<Us
     return uq.first({ useMasterKey: true });
 }
 
-export async function getUserProfileByID(profileId: string, conf: ConferenceT): Promise<UserProfileT | undefined> {
+export async function getUserProfileByID(profileId: string, conf?: ConferenceT): Promise<UserProfileT | undefined> {
     let uq = new Parse.Query(UserProfile);
-    uq.equalTo("conference", conf);
+    if (conf) {
+        uq.equalTo("conference", conf);
+    }
     try {
         return await uq.get(profileId, { useMasterKey: true });
     }
@@ -64,6 +67,22 @@ export async function getUserProfileByUserID(userId: string, conf: ConferenceT):
     return uq.first({ useMasterKey: true });
 }
 
+export async function getRoleByName(name: string, conf: ConferenceT): Promise<RoleT> {
+    let uq = new Parse.Query(Role);
+    uq.equalTo("name", conf.id + "-" + name);
+    uq.equalTo("conference", conf);
+    let result = await uq.first({ useMasterKey: true });
+    assert(result, "All roles should exist.");
+    return result;
+}
+
+export async function isUserInRole(role: string | RoleT, userId: string, conf: ConferenceT): Promise<boolean> {
+    if (typeof role === "string") {
+        role = await getRoleByName(role, conf);
+    }
+    const roleUsersQuery = role.getUsers().query();
+    return (await roleUsersQuery.equalTo("id", userId).count({ useMasterKey: true })) > 0;
+}
 
 // var allUsersPromise;
 // var emailsToParseUser;

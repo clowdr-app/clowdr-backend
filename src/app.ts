@@ -5,27 +5,26 @@ import Parse from "parse/node";
 import Express, { Request, Response, NextFunction } from 'express';
 import CORS from 'cors';
 import BodyParser from "body-parser";
-// import Twilio from "twilio";
+import Twilio from "twilio";
 // import JWT from 'jsonwebtoken';
 
-import { getSession, getConference, getUserProfile } from "./ParseHelpers";
+import { getSession, getConference, getUserProfile, getUserProfileByID, getRoleByName, isUserInRole } from "./ParseHelpers";
 
 // import moment from "moment";
 // import crypto from "crypto";
-
-import { videoToken, ChatGrant, generateToken } from "./tokens";
-import { configureTwilio } from './Twilio';
 
 // import qs from 'qs';
 import {
     Conference, ConferenceT,
     Role, RoleT,
     TextChat, TextChatT,
+    UserT,
     VideoRoom, VideoRoomT
 } from "./SchemaTypes";
 
 import * as Video from "./Video";
 import { handleCreateChat, handleGenerateFreshToken } from "./Chat";
+import { getConfig } from "./Config";
 
 // Initialise the Express app
 const app = Express();
@@ -34,28 +33,11 @@ app.use(CORS());
 
 // TODO: This app has to initialise and pick up whatever conference state has
 // formed inside Twilio and make our data match up. E.g. chats and video rooms
-// may have been created while this was offline, or a request might come in for
-// a conference we haven't seen yet.
-// It also needs to be able to configure conferences to use ngrok at first
-// startup.
-
-// TODO: 'onMemberAdd' to Announcements channel
-//       - set role (according to admin status) by sending 'modify' response
-//         back to Twilio
-
-// TODO: 'onMemberAdded' for detecting sticky-shift into 'large channel' mode
-
-// TODO: 'onMessageSent' / 'onMessageUpdated' / 'onMessageRemoved' / 'onMediaMessageSent'
-//       for (large) channel mirroring (set webhook per-channel)
-
-// TODO: 'onChannelUpdated' / 'onChannelDestroyed' for (large) channel mirroring
-
-// TODO: 'onUserAdded' - ensure role and friendly name are set correctly
-//                     - ensure they are a member of the announcements channel
+// may have been created while this was offline.
 
 // TODO: Make sure any existing conference's chat service are configured with the
-//       above hooks list.
-// TODO: How do we keep the above hooks list consistent with the 'create conference' code?
+//       hooks handled in processTwilioChatEvent.
+// TODO: How do we keep the hooks list consistent with the 'create conference' code?
 
 
 /**********************
@@ -63,41 +45,104 @@ app.use(CORS());
  **********************/
 
 async function processTwilioChatEvent(req: Express.Request, res: Express.Response) {
-    //     let roomSID = req.body.RoomSid;
-    //     console.log("Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid)
-    //     try {
-    //         if (req.body.StatusCallbackEvent === 'room-ended') {
-    //             let roomQ = new Parse.Query(VideoRoom);
-    //             roomQ.equalTo("twilioID", roomSID);
-    //             let room = await roomQ.first({ useMasterKey: true });
-    //             if (room) {
-    //                 if (!room.get("ephemeral")) {
-    //                     console.log(`Removing Twilio room ID for ${room.get("name")}`)
-    //                     room.set("twilioID", "");
-    //                     await room.save({}, { useMasterKey: true });
-    //                 } else {
-    //                     await room.destroy({ useMasterKey: true });
-    //                 }
-    //             } else {
-    //                 console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
-    //             }
-    //         }
-    //     } catch (err) {
-    //         console.error("Error processing Twilio event", err);
-    //     }
+    let status = 200;
+    let response = {};
 
-    //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
+    let twilioAccountSID = req.body.AccountSid;
+    let twilioInstanceSID = req.body.InstanceSid;
 
-    res.status(200);
-    res.send({});
+    switch (req.body.EventType) {
+        case "onMemberAdded":
+            // TODO: for detecting sticky-shift into 'large channel' mode
+            //
+            // - When upgrading to mirroring, set these webhooks on the channel:
+            // 'onMessageSent' / 'onMessageUpdated'
+            // 'onMessageRemoved' / 'onMediaMessageSent'
+            // 'onChannelUpdated' / 'onChannelDestroyed'
+            break;
+
+        case "onUserAdded":
+            const targetUserProfileId = req.body.Identity;
+            const targetUserProfile = await getUserProfileByID(targetUserProfileId);
+            if (!targetUserProfile) {
+                throw new Error("Invalid target user profile ID.");
+            }
+
+            let conference = targetUserProfile.get("conference") as ConferenceT;
+            let config = await getConfig(conference.id);
+            {
+                const expectedTwilioAccountSID = config.TWILIO_ACCOUNT_SID;
+                const expectedTwilioInstanceSID = config.TWILIO_CHAT_SERVICE_SID;
+                assert(twilioAccountSID === expectedTwilioAccountSID, "Unexpected Twilio account SID.");
+                assert(twilioInstanceSID === expectedTwilioInstanceSID, "Unexpected Twilio chat service SID.");
+            }
+
+            const targetUser = targetUserProfile.get("user") as UserT;
+
+            // Add to Announcements channel if necessary
+            const twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
+            const twilioChatService = twilioClient.chat.services(config.TWILIO_CHAT_SERVICE_SID);
+            const twilioChannelCtx = twilioChatService.channels(config.TWILIO_ANNOUNCEMENTS_CHANNEL_SID);
+            const members = await twilioChannelCtx.members.list({
+                identity: targetUserProfile.id
+            });
+            if (members.length === 0) {
+                const roles = await twilioChatService.roles.list();
+                const accouncementsAdminRole = roles.find(x => x.friendlyName === "announcements admin");
+                const accouncementsUserRole = roles.find(x => x.friendlyName === "announcements user");
+                assert(accouncementsAdminRole);
+                assert(accouncementsUserRole);
+
+                const isAdmin = await isUserInRole("admin", targetUser.id, conference);
+                await twilioChannelCtx.members.create({
+                    identity: targetUserProfile.id,
+                    roleSid: isAdmin
+                        ? accouncementsAdminRole.sid
+                        : accouncementsUserRole.sid
+                });
+            }
+
+            // Ensure friendly_name is set properly
+            response = {
+                friendlyName: targetUserProfile.get("displayName")
+            };
+            break;
+
+        // Large-channel-mirroring (per-channel webhooks)
+        case "onMessageSent":
+            // TODO: for (large) channel mirroring (set webhook per-channel)
+            break;
+        case "onMessageUpdated":
+            // TODO: for (large) channel mirroring (set webhook per-channel)
+            break;
+        case "onMessageRemoved":
+            // TODO: for (large) channel mirroring (set webhook per-channel)
+            break;
+        case "onMediaMessageSent":
+            // TODO: for (large) channel mirroring (set webhook per-channel)
+            break;
+        case "onChannelUpdated":
+            // TODO: for (large) channel mirroring (set webhook per-channel)
+            break;
+        case "onChannelDestroyed":
+            // TODO: for (large) channel mirroring (set webhook per-channel)
+            break;
+    }
+
+    res.status(status);
+    res.send(response);
 }
 
 app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
-        console.log(`${req.body.EventType} event received for: ${req.body.ChannelSid}`);
+        console.log(`${req.body.EventType} event received for: ${req.body.ChannelSid ?? req.body.Identity}`);
         await processTwilioChatEvent(req, res);
+        return;
     } catch (e) {
-        console.log(e);
+        console.error("Error processing Twilio webhook. Rejecting changes.", e);
+        res.status(403);
+        res.send();
+        return;
     }
 })
 
@@ -219,6 +264,35 @@ app.post('/chat/create',
 /*******************
  * Video endpoints *
  *******************/
+
+/* Handle video room twilio webhook callback:
+
+//     let roomSID = req.body.RoomSid;
+    //     console.log("Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid)
+    //     try {
+    //         if (req.body.StatusCallbackEvent === 'room-ended') {
+    //             let roomQ = new Parse.Query(VideoRoom);
+    //             roomQ.equalTo("twilioID", roomSID);
+    //             let room = await roomQ.first({ useMasterKey: true });
+    //             if (room) {
+    //                 if (!room.get("ephemeral")) {
+    //                     console.log(`Removing Twilio room ID for ${room.get("name")}`)
+    //                     room.set("twilioID", "");
+    //                     await room.save({}, { useMasterKey: true });
+    //                 } else {
+    //                     await room.destroy({ useMasterKey: true });
+    //                 }
+    //             } else {
+    //                 console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
+    //             }
+    //         }
+    //     } catch (err) {
+    //         console.error("Error processing Twilio event", err);
+    //     }
+
+    //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
+ * 
+ */
 
 // app.post("/video/token", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
 //     try {
