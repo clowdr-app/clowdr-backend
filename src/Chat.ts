@@ -194,12 +194,14 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
 
                 await callWithRetry(() => newChannel.members().create({
                     identity: userProfile.id,
+                    // TODO: If is admin, set as admin role
                     roleSid: isDM ? channelUserRole.sid : channelAdminRole.sid
                 }));
 
                 await Promise.all(userProfilesToInvite.map(async profile => {
                     await callWithRetry(() => newChannel.invites().create({
                         identity: profile.id,
+                        // TODO: If is admin, set as admin role
                         roleSid: channelUserRole.sid
                     }));
                 }));
