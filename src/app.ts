@@ -23,7 +23,7 @@ import {
 } from "./SchemaTypes";
 
 import * as Video from "./Video";
-import { handleCreateChat, handleGenerateFreshToken } from "./Chat";
+import { handleAddToChat, handleCreateChat, handleGenerateFreshToken, handleInviteToChat } from "./Chat";
 import { getConfig } from "./Config";
 
 // Initialise the Express app
@@ -236,6 +236,16 @@ app.post('/chat/create',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
     handleCreateChat);
+
+app.post('/chat/invite',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    handleInviteToChat);
+
+app.post('/chat/addMember',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    handleAddToChat);
 
 // // TODO: Can't we control this through Twilio permissions?
 // app.post('/chat/deleteMessage', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {

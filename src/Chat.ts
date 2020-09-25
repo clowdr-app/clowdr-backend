@@ -59,14 +59,16 @@ async function ensureTwilioUsersExist(service: ServiceContext, profiles: Array<U
     }));
 }
 
+// TODO: Ensure we extract common functionality (e.g. adding members to a channel)
+//       into functions.
+
 /**
  * Request body:
- * 
- * identity: session token
- * conference: conference id
- * invite: user profile ids to invite
- * mode: 'public' or 'private'
- * title: friendly name
+ *  - identity: session token
+ *  - conference: conference id
+ *  - invite: user profile ids to invite
+ *  - mode: 'public' or 'private'
+ *  - title: friendly name
  */
 export async function handleCreateChat(req: Request, res: Response, next: NextFunction) {
     try {
@@ -84,29 +86,37 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         }
         const [sessionObj, conf, config, userProfile] = requestContext;
 
-        const userProfileIdsToInvite = req.body.invite;
+        const _userProfileIdsToInvite = req.body.invite;
         const mode = req.body.mode;
         let title = req.body.title;
 
         // Validate inputs
-        if (!userProfileIdsToInvite || !mode || !title) {
+        if (!_userProfileIdsToInvite || !mode || !title) {
             res.status(400);
             res.send({ status: "Missing request parameter(s)." });
             return;
         }
 
-        if (!(userProfileIdsToInvite instanceof Array) || userProfileIdsToInvite.length === 0) {
+        if (!(_userProfileIdsToInvite instanceof Array)) {
             res.status(400);
-            res.send({ status: "Invited members should be a non-empty array." });
+            res.send({ status: "Invited members should be an array." });
             return;
         }
 
-        for (const inviteId of userProfileIdsToInvite) {
+        for (const inviteId of _userProfileIdsToInvite) {
             if (typeof inviteId !== "string") {
                 res.status(400);
                 res.send({ status: "Invited member ids should be strings." });
                 return;
             }
+        }
+
+        const userProfileIdsToInvite = _userProfileIdsToInvite.filter(x => x !== userProfile.id) as string[];
+
+        if (userProfileIdsToInvite.length === 0) {
+            res.status(400);
+            res.send({ status: "Invited members should be a non-empty array (not including the creator)." });
+            return;
         }
 
         if (mode !== "public" && mode !== "private") {
@@ -151,10 +161,6 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         const attributes = {
             isDM: isDM
         };
-        if (isDM) {
-            attributes["member1"] = userProfile.id;
-            attributes["member2"] = userProfilesToInvite[0].id;
-        }
 
         const accountSID = config.TWILIO_ACCOUNT_SID;
         const accountAuth = config.TWILIO_AUTH_TOKEN;
@@ -228,6 +234,36 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
     }
 }
 
-// TODO: We have to control channel user roles by setting them at the time of
-//       invite / add so we need to control 'invite user'/'add member' through
-//       the backend
+
+// We have to control channel user roles by setting them at the time of
+// invite / add so we need to control 'invite user'/'add member' through
+// the backend.
+// However, a user can only join private channels they have been invited to
+// (so the role will be set), or join public channels (which will inherit their
+// service-level role).
+
+/**
+ * Invite a user to join a chat.
+ * 
+ * Request body:
+ *  - identity: session token
+ *  - conference: conference id
+ *  - channel: Channel sid,
+    - targetIdentity: Id of user profile to invite
+ */
+export async function handleInviteToChat(req: Request, res: Response, next: NextFunction) {
+    // TODO: Re-use code from create
+}
+
+/**
+ * Add a user as a member directly into a chat.
+ *
+ * Request body:
+ *  - identity: session token
+ *  - conference: conference id
+ *  - channel: Channel sid,
+    - targetIdentity: Id of user profile to add
+ */
+export async function handleAddToChat(req: Request, res: Response, next: NextFunction) {
+    // TODO: Re-use code from create
+}
