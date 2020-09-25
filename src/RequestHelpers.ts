@@ -13,7 +13,7 @@ export async function callWithRetry<T>(f: () => Promise<T>): Promise<T> {
             startingDelay: 500,
             retry: (err, attemptNum) => {
                 console.error(err);
-                if (err && err.code == 20429)
+                if (err && err.code === 20429)
                     return true;
                 console.log("Unexpected error:")
                 console.error(err);
@@ -27,7 +27,7 @@ export async function handleRequestIntro(req: Request, res: Response, next: Next
     Promise<[Parse.Session, ConferenceT, ClowdrConfig, UserProfileT] | undefined> {
     let ok = true;
     const sessionToken = req.body.identity;
-    let sessionObj = await getSession(sessionToken);
+    const sessionObj = await getSession(sessionToken);
     if (!sessionObj) {
         ok = false;
         res.status(401);

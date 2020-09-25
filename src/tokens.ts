@@ -14,8 +14,8 @@ export function generateToken(
         config.TWILIO_API_KEY,
         config.TWILIO_API_SECRET,
         {
-            identity: identity,
-            ttl: ttl
+            identity,
+            ttl
         }
     );
 }

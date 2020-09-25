@@ -1,0 +1,9 @@
+{
+    "extends": "tslint:recommended",
+    "rules": {
+        "no-empty": false,
+        "prefer-const": true,
+        "array-type": false,
+        "no-console": false // TODO: Change in production
+    }
+}

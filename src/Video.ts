@@ -16,27 +16,27 @@ import { getTwilioClient } from './Twilio';
 // };
 
 export async function createNewRoom(req: Express.Request, res: Express.Response) {
-    let token = req.body.identity;
-    let confID = req.body.conference;
+    const token = req.body.identity;
+    const confID = req.body.conference;
 
     console.log(`[Create new room]: Fetching conference ${confID}`);
-    let conf = await getConference(confID);
+    const conf = await getConference(confID);
     if (!conf) {
         console.warn('[Create new room]: Request did not include conference id.');
         return;
     }
 
     console.log("[Create new room]: Got conference")
-    let roomName = req.body.room;
+    const roomName = req.body.room;
 
-    let config = await getConfig(confID);
-    let twilio = await getTwilioClient(confID, config);
+    const config = await getConfig(confID);
+    const twilio = await getTwilioClient(confID, config);
 
-    let visibility = req.body.visibility;
+    const visibility = req.body.visibility;
     let mode = req.body.mode;
     let persistence = req.body.emphemeral;
 
-    let socialSpaceID = req.body.socialSpace;
+    const socialSpaceID = req.body.socialSpace;
     if (!mode)
         mode = "group-small";
     if (!persistence)
@@ -44,42 +44,42 @@ export async function createNewRoom(req: Express.Request, res: Express.Response)
 
 
     try {
-        let query = new Parse.Query(Parse.Session);
+        const query = new Parse.Query(Parse.Session);
         // console.log(token);
         query.include("user");
         query.equalTo("sessionToken", token);
-        let session = await query.first({ useMasterKey: true });
+        const session = await query.first({ useMasterKey: true });
         console.log("Create new room: Got user from session token")
         if (session) {
-            let parseUser = session.get("user");
-            //Validate has privileges for conference
+            const parseUser = session.get("user");
+            // Validate has privileges for conference
             const accesToConf = new Parse.Query(ConferencePermission);
             accesToConf.equalTo("conference", conf);
-            accesToConf.equalTo("action", privilegeRoles['createVideoRoom']);
-            console.log('--> ' + JSON.stringify(privilegeRoles['createVideoRoom']));
-            //TODO access-check for each option, too, but I don't have time now...
+            accesToConf.equalTo("action", privilegeRoles.createVideoRoom);
+            console.log('--> ' + JSON.stringify(privilegeRoles.createVideoRoom));
+            // TODO access-check for each option, too, but I don't have time now...
             const hasAccess = await accesToConf.first({ sessionToken: token });
             console.log('Permission to create video room? ' + hasAccess);
             if (hasAccess && hasAccess.id) {
-                //Try to create the room
+                // Try to create the room
                 try {
                     console.log("creating room with callback" + conf.config.TWILIO_CALLBACK_URL)
                     console.log("For " + parseUser.id + ": " + parseUser.get("displayname"))
                     console.log(roomName)
-                    let maxParticipants = (mode === "peer-to-peer" ? 10 : (mode === "group-small" ? 4 : 10));
-                    let twilioRoom = await twilio.video.rooms.create({
+                    const maxParticipants = (mode === "peer-to-peer" ? 10 : (mode === "group-small" ? 4 : 10));
+                    const twilioRoom = await twilio.video.rooms.create({
                         type: mode,
                         uniqueName: roomName,
-                        maxParticipants: maxParticipants,
+                        maxParticipants,
                         statusCallback: conf.config.TWILIO_CALLBACK_URL
                     });
-                    //Create a chat room too
+                    // Create a chat room too
 
-                    let chat = twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
+                    const chat = twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
 
 
-                    //Create a new room in the DB
-                    let parseRoom = new BreakoutRoom();
+                    // Create a new room in the DB
+                    const parseRoom = new BreakoutRoom();
                     parseRoom.set("title", roomName);
                     parseRoom.set("conference", conf);
                     parseRoom.set("twilioID", twilioRoom.sid);
@@ -88,13 +88,13 @@ export async function createNewRoom(req: Express.Request, res: Express.Response)
                     parseRoom.set("mode", mode);
                     parseRoom.set("capacity", maxParticipants);
                     if (socialSpaceID) {
-                        let socialSpace = new SocialSpace();
+                        const socialSpace = new SocialSpace();
                         socialSpace.id = socialSpaceID;
                         parseRoom.set("socialSpace", socialSpace);
                     }
-                    let modRole = await getOrCreateRole(conf.id, "moderator");
+                    const modRole = await getOrCreateRole(conf.id, "moderator");
 
-                    let acl = new Parse.ACL();
+                    const acl = new Parse.ACL();
                     acl.setPublicReadAccess(false);
                     acl.setPublicWriteAccess(false);
                     acl.setRoleReadAccess(modRole, true);
@@ -106,30 +106,30 @@ export async function createNewRoom(req: Express.Request, res: Express.Response)
                     }
                     parseRoom.setACL(acl, { useMasterKey: true });
                     await parseRoom.save({}, { useMasterKey: true });
-                    let attributes = {
+                    const attributes = {
                         category: "breakoutRoom",
                         roomID: parseRoom.id
                     }
 
-                    let twilioChatRoom = await chat.channels.create({
+                    const twilioChatRoom = await chat.channels.create({
                         friendlyName: roomName,
                         attributes: JSON.stringify(attributes),
                         type:
                             (visibility === "unlisted" ? "private" : "public")
                     });
                     if (visibility === "unlisted") {
-                        //give this user access to the chat
-                        let userProfile = await getUserProfile(parseUser.id, conf);
+                        // give this user access to the chat
+                        const userProfile = await getUserProfile(parseUser.id, conf);
                         console.log("Creating chat room for " + roomName + " starting user " + userProfile.id)
                         await chat.channels(twilioChatRoom.sid).members.create({ identity: userProfile.id });
-                        //Make sure that all moderators and admins have access to this room, too.
-                        let modRole = await getOrCreateRole(conf.id, "moderator");
-                        let userQuery = modRole.getUsers().query();
-                        let profilesQuery = new Parse.Query(UserProfile);
+                        // Make sure that all moderators and admins have access to this room, too.
+                        const modRole = await getOrCreateRole(conf.id, "moderator");
+                        const userQuery = modRole.getUsers().query();
+                        const profilesQuery = new Parse.Query(UserProfile);
                         profilesQuery.equalTo("conference", conf);
                         profilesQuery.matchesQuery("user", userQuery);
                         profilesQuery.find({ useMasterKey: true }).then((users) => {
-                            for (let user of users) {
+                            for (const user of users) {
                                 chat.channels(twilioChatRoom.sid).members.create({ identity: user.id });
                             }
                         })
@@ -334,7 +334,7 @@ function sendTokenResponse(
     res.send(
         JSON.stringify({
             token: token.toJwt(),
-            roomName: roomName
+            roomName
         })
     );
 };

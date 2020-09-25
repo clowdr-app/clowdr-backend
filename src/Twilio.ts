@@ -5,7 +5,7 @@ import { getUserProfileByID } from './ParseHelpers';
 
 
 const twilioClientCache = new Map<string, Twilio.Twilio>();
-export async function getTwilioClient(confId: string, config: ClowdrConfig): Promise<Twilio.Twilio> { 
+export async function getTwilioClient(confId: string, config: ClowdrConfig): Promise<Twilio.Twilio> {
     let result = twilioClientCache.get(confId);
     if (result) {
         return result;
@@ -71,8 +71,8 @@ Post Webhook URL present: ${!!preWebhookURL}
         const twilioUsers = await chatService.users.list();
         await Promise.all(twilioUsers.map(async twilioUser => {
             try {
-                let profileId = twilioUser.identity;
-                let profile = await getUserProfileByID(profileId);
+                const profileId = twilioUser.identity;
+                const profile = await getUserProfileByID(profileId);
                 assert(profile);
                 if (twilioUser.friendlyName !== profile.get("displayName")) {
                     return twilioUser.update({

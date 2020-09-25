@@ -12,7 +12,7 @@ export async function getParseAdminRole(conf: ConferenceT): Promise<RoleT> {
         return result;
     }
 
-    let roleQ = new Parse.Query(Role);
+    const roleQ = new Parse.Query(Role);
     roleQ.equalTo("conference", conf);
     roleQ.equalTo("name", generateRoleName(conf.id, "admin"));
     result = await roleQ.first({ useMasterKey: true });
@@ -26,10 +26,10 @@ export async function getParseAdminRole(conf: ConferenceT): Promise<RoleT> {
 
 const roleCache = new Map<string, RoleT>();
 export async function getOrCreateRole(conf: ConferenceT, roleName: RoleNames): Promise<RoleT> {
-    let name = generateRoleName(conf.id, roleName);
+    const name = generateRoleName(conf.id, roleName);
 
     {
-        let cachedRole = roleCache.get(name);
+        const cachedRole = roleCache.get(name);
         if (cachedRole) {
             return cachedRole;
         }
@@ -38,15 +38,15 @@ export async function getOrCreateRole(conf: ConferenceT, roleName: RoleNames): P
     let result: RoleT;
     console.log("Get or create role: " + name)
     try {
-        var roleQ = new Parse.Query(Role);
+        const roleQ = new Parse.Query(Role);
         roleQ.equalTo("conference", conf);
         roleQ.equalTo("name", name);
         roleQ.include("users");
-        let role = await roleQ.first({ useMasterKey: true });
+        const role = await roleQ.first({ useMasterKey: true });
         if (!role) {
-            let roleACL = new Parse.ACL();
+            const roleACL = new Parse.ACL();
 
-            let adminRole = await getParseAdminRole(conf);
+            const adminRole = await getParseAdminRole(conf);
             roleACL.setPublicReadAccess(true);
             let newrole = new Role(name, roleACL);
             newrole.getRoles().add(adminRole);

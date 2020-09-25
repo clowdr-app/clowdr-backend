@@ -45,11 +45,11 @@ app.use(CORS());
  **********************/
 
 async function processTwilioChatEvent(req: Express.Request, res: Express.Response) {
-    let status = 200;
+    const status = 200;
     let response = {};
 
-    let twilioAccountSID = req.body.AccountSid;
-    let twilioInstanceSID = req.body.InstanceSid;
+    const twilioAccountSID = req.body.AccountSid;
+    const twilioInstanceSID = req.body.InstanceSid;
 
     switch (req.body.EventType) {
         case "onMemberAdded":
@@ -68,8 +68,8 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
                 throw new Error("Invalid target user profile ID.");
             }
 
-            let conference = targetUserProfile.get("conference") as ConferenceT;
-            let config = await getConfig(conference.id);
+            const conference = targetUserProfile.get("conference") as ConferenceT;
+            const config = await getConfig(conference.id);
             {
                 const expectedTwilioAccountSID = config.TWILIO_ACCOUNT_SID;
                 const expectedTwilioInstanceSID = config.TWILIO_CHAT_SERVICE_SID;
@@ -301,7 +301,7 @@ app.post('/chat/addMember',
     //     }
 
     //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
- * 
+ *
  */
 
 // app.post("/video/token", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
@@ -382,7 +382,7 @@ async function runBackend() {
     let promises: Array<Promise<any>> = [];
 
     if ((process.env.TWILIO_BACKEND_SKIP_INIT || "false") === "false") {
-        let query = new Parse.Query(Conference);
+        const query = new Parse.Query(Conference);
         query.find({ useMasterKey: true }).then((instances) => {
             promises = instances.map(
                 async (conf) => {

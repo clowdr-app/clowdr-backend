@@ -37,7 +37,7 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
         res.set('Content-Type', 'application/json');
         res.send(JSON.stringify({
             token: accessToken.toJwt(),
-            identity: identity,
+            identity,
             expiry: new Date().getTime() + (expiryDistanceSeconds * 1000)
         }));
     } catch (err) {
@@ -46,7 +46,7 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
 }
 
 async function ensureTwilioUsersExist(service: ServiceContext, profiles: Array<UserProfileT>) {
-    let existingUserProfileIds = (await service.users.list()).map(x => x.identity);
+    const existingUserProfileIds = (await service.users.list()).map(x => x.identity);
     await Promise.all(profiles.map(x => {
         if (!existingUserProfileIds.includes(x.id)) {
             // TODO: Rely on `onUserAdded` to set their service-level role correctly (e.g. for admin users)
@@ -76,7 +76,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
          * DM = Private channel with 1 invited member.
          * Private group = Private channel with at least 2 invited members.
          * Public group = Public channel with 1 or more invited members.
-         * 
+         *
          * (Invalid to have 0 invited members.)
          */
 
@@ -159,7 +159,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
                 .substr(0, 64);
         const createdBy = isDM ? "system" : userProfile.id;
         const attributes = {
-            isDM: isDM
+            isDM
         };
 
         const accountSID = config.TWILIO_ACCOUNT_SID;
@@ -188,9 +188,9 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
             assert(channelUserRole);
 
             const newChannel = await callWithRetry(() => service.channels.create({
-                friendlyName: friendlyName,
-                uniqueName: uniqueName,
-                createdBy: createdBy,
+                friendlyName,
+                uniqueName,
+                createdBy,
                 type: mode,
                 attributes: JSON.stringify(attributes)
             }));
@@ -244,12 +244,12 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
 
 /**
  * Invite a user to join a chat.
- * 
+ *
  * Request body:
  *  - identity: session token
  *  - conference: conference id
  *  - channel: Channel sid,
-    - targetIdentity: Id of user profile to invite
+ *  - targetIdentity: Id of user profile to invite
  */
 export async function handleInviteToChat(req: Request, res: Response, next: NextFunction) {
     // TODO: Re-use code from create
@@ -262,7 +262,7 @@ export async function handleInviteToChat(req: Request, res: Response, next: Next
  *  - identity: session token
  *  - conference: conference id
  *  - channel: Channel sid,
-    - targetIdentity: Id of user profile to add
+ *  - targetIdentity: Id of user profile to add
  */
 export async function handleAddToChat(req: Request, res: Response, next: NextFunction) {
     // TODO: Re-use code from create

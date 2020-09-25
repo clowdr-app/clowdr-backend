@@ -28,19 +28,19 @@ export type ClowdrConfig = {
 const conferenceConfigCache = new Map<string, ClowdrConfig>();
 export async function getConfig(confId: string): Promise<ClowdrConfig> {
     // Did we already cache the config for this conference?
-    let _config: ClowdrConfig | null = conferenceConfigCache.get(confId) ?? null;
+    const _config: ClowdrConfig | null = conferenceConfigCache.get(confId) ?? null;
     if (_config) {
         return _config;
     }
 
     // @ts-ignore
-    let config: ClowdrConfig = {};
+    const config: ClowdrConfig = {};
 
     // Load config from the database
-    let q = new Parse.Query(ConferenceConfig)
+    const q = new Parse.Query(ConferenceConfig)
     q.equalTo("conference", new Parse.Object("Conference", { id: confId }) as any);
-    let res = await q.find({ useMasterKey: true });
-    for (let obj of res) {
+    const res = await q.find({ useMasterKey: true });
+    for (const obj of res) {
         config[obj.get("key")] = obj.get("value");
     }
 

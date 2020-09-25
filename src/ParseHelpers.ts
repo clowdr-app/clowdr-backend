@@ -7,10 +7,10 @@ import { configureTwilio } from "./Twilio";
 import assert from "assert";
 
 export async function getSession(token: string): Promise<Parse.Session | null> {
-    let query = new Parse.Query(Parse.Session);
+    const query = new Parse.Query(Parse.Session);
     query.include("user");
     query.equalTo("sessionToken", token);
-    let session = await query.first({ useMasterKey: true });
+    const session = await query.first({ useMasterKey: true });
     if (session) {
         return session;
     }
@@ -24,7 +24,7 @@ export async function getConference(id: string): Promise<ConferenceT> {
         return result;
     }
 
-    let q = new Parse.Query(Conference);
+    const q = new Parse.Query(Conference);
     result = await q.get(id, { useMasterKey: true });
     conferenceCache.set(id, result);
 
@@ -39,14 +39,14 @@ export async function getConference(id: string): Promise<ConferenceT> {
 }
 
 export async function getUserProfile(user: UserT, conf: ConferenceT): Promise<UserProfileT | undefined> {
-    let uq = new Parse.Query(UserProfile);
+    const uq = new Parse.Query(UserProfile);
     uq.equalTo("user", user);
     uq.equalTo("conference", conf);
     return uq.first({ useMasterKey: true });
 }
 
 export async function getUserProfileByID(profileId: string, conf?: ConferenceT): Promise<UserProfileT | undefined> {
-    let uq = new Parse.Query(UserProfile);
+    const uq = new Parse.Query(UserProfile);
     if (conf) {
         uq.equalTo("conference", conf);
     }
@@ -59,8 +59,8 @@ export async function getUserProfileByID(profileId: string, conf?: ConferenceT):
 }
 
 export async function getUserProfileByUserID(userId: string, conf: ConferenceT): Promise<UserProfileT | undefined> {
-    let uq = new Parse.Query(UserProfile);
-    let fauxUser = new User();
+    const uq = new Parse.Query(UserProfile);
+    const fauxUser = new User();
     fauxUser.id = userId;
     uq.equalTo("user", fauxUser);
     uq.equalTo("conference", conf);
@@ -68,10 +68,10 @@ export async function getUserProfileByUserID(userId: string, conf: ConferenceT):
 }
 
 export async function getRoleByName(name: string, conf: ConferenceT): Promise<RoleT> {
-    let uq = new Parse.Query(Role);
+    const uq = new Parse.Query(Role);
     uq.equalTo("name", conf.id + "-" + name);
     uq.equalTo("conference", conf);
-    let result = await uq.first({ useMasterKey: true });
+    const result = await uq.first({ useMasterKey: true });
     assert(result, "All roles should exist.");
     return result;
 }
