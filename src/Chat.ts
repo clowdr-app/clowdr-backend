@@ -88,10 +88,10 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
 
         const _userProfileIdsToInvite = req.body.invite;
         const mode = req.body.mode;
-        let title = req.body.title;
+        let title = req.body.title?.trim();
 
         // Validate inputs
-        if (!_userProfileIdsToInvite || !mode || !title) {
+        if (!_userProfileIdsToInvite || !title || title === "" || !mode) {
             res.status(400);
             res.send({ status: "Missing request parameter(s)." });
             return;
@@ -148,7 +148,6 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
 
         const isPrivate = mode === "private";
         const isDM = isPrivate && userProfilesToInvite.length === 1;
-        const friendlyName = title;
         // Twilio max-length 64 chars
         const uniqueName
             = (isDM
@@ -157,6 +156,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
                     : userProfilesToInvite[0].id + "-" + userProfile.id)
                 : (userProfile.id + "-" + uuid.v4()))
                 .substr(0, 64);
+        const friendlyName = isDM ? uniqueName : title;
         const createdBy = isDM ? "system" : userProfile.id;
         const attributes = {
             isDM
@@ -173,20 +173,44 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
                     .services(serviceSID)
                     .channels.list()).filter(x => x.uniqueName === uniqueName)
                 : [];
+
+        const service = twilioClient.chat.services(serviceSID);
+        const roles = await service.roles.list();
+        const channelAdminRole = roles.find(x => x.friendlyName === "channel admin");
+        const channelUserRole = roles.find(x => x.friendlyName === "channel user");
+
+        assert(channelAdminRole);
+        assert(channelUserRole);
+
         if (existingChannels.length > 0) {
+            const newChannel = existingChannels[0];
+
+            const members = (await newChannel.members().list()).map(x => x.identity);
+            const invites = (await newChannel.invites().list()).map(x => x.identity);
+
+            if (!members.includes(userProfile.id)) {
+                await callWithRetry(() => newChannel.members().create({
+                    identity: userProfile.id,
+                    // TODO: If is admin, set as admin role
+                    roleSid: isDM ? channelUserRole.sid : channelAdminRole.sid
+                }));
+            }
+
+            await Promise.all(userProfilesToInvite.map(async profile => {
+                if (!members.includes(profile.id) && !invites.includes(profile.id)) {
+                    await callWithRetry(() => newChannel.invites().create({
+                        identity: profile.id,
+                        // TODO: If is admin, set as admin role
+                        roleSid: channelUserRole.sid
+                    }));
+                }
+            }));
+
             res.status(200);
-            res.send({ channelSID: existingChannels[0].sid });
+            res.send({ channelSID: newChannel.sid });
             return;
         }
         else {
-            const service = twilioClient.chat.services(serviceSID);
-            const roles = await service.roles.list();
-            const channelAdminRole = roles.find(x => x.friendlyName === "channel admin");
-            const channelUserRole = roles.find(x => x.friendlyName === "channel user");
-
-            assert(channelAdminRole);
-            assert(channelUserRole);
-
             const newChannel = await callWithRetry(() => service.channels.create({
                 friendlyName,
                 uniqueName,
