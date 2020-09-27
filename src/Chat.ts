@@ -275,3 +275,5 @@ export async function handleAddToChat(req: Request, res: Response, next: NextFun
 // Message attributes have a 4KiB limit (https://www.twilio.com/docs/chat/chat-limits)
 // A Parse Server profile unique ID is typically 10 characters = 10 bytes, so we
 // can store about 400 reactions to a single message.
+
+// TODO: "Allowed to send message" query
