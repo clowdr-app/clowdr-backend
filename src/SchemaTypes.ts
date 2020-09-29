@@ -1,5 +1,5 @@
 import Parse from "parse/node";
-import { PromisesRemapped, WholeSchema, WholeSchemaKeys } from "clowdr-db-schema/src/classes/DataLayer/WholeSchema";
+import { PromisesRemapped, WholeSchema, WholeSchemaKeys } from "@clowdr-app/clowdr-db-schema/build/DataLayer/WholeSchema";
 
 export type ParseObjectType<K extends WholeSchemaKeys> = Parse.Object<PromisesRemapped<WholeSchema[K]["value"]>>;
 export type ConferenceT = ParseObjectType<"Conference">;

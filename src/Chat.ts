@@ -301,3 +301,7 @@ export async function handleAddToChat(req: Request, res: Response, next: NextFun
 // can store about 400 reactions to a single message.
 
 // TODO: "Allowed to send message" query
+
+// TODO: Prevent private channels from growing too large (i.e. not more than 1000 users)
+//       otherwise they spill over into being mirrored and we don't support private mirrored
+//       chats at the moment.

@@ -1,4 +1,4 @@
-import { RoleNames } from "clowdr-db-schema/src/classes/DataLayer/Schema/_Role";
+import { RoleNames } from "@clowdr-app/clowdr-db-schema/build/DataLayer/Schema/_Role";
 import { ConferenceT, Role, RoleT } from "./SchemaTypes";
 
 function generateRoleName(confId: string, roleName: RoleNames): string {
@@ -69,11 +69,6 @@ export async function getOrCreateRole(conf: ConferenceT, roleName: RoleNames): P
     return result;
 }
 
-
-// async function userInRoles(user, allowedRoles) {
-//     const roles = await new Parse.Query(Parse.Role).equalTo('users', user).find();
-//     return roles.find(r => allowedRoles.find(allowed => r.get("name") === allowed));
-// }
 
 // async function sessionTokenIsFromModerator(sessionToken, confID) {
 //     let session = await getSession(sessionToken);
