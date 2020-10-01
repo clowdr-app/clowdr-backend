@@ -3,6 +3,7 @@ import { ClowdrConfig } from './Config';
 import assert from "assert";
 import { getUserProfileByID } from './ParseHelpers';
 import { VideoRoom } from './SchemaTypes';
+import Parse from "parse/node";
 
 
 const twilioClientCache = new Map<string, Twilio.Twilio>();
@@ -98,7 +99,7 @@ Post Webhook URL present: ${!!preWebhookURL}
             const parseRoomsQ = new Parse.Query(VideoRoom);
             parseRoomsQ.equalTo("twilioID", twilioRoomSid);
             await parseRoomsQ.map(async parseRoom => {
-                await parseRoom.save({ twilioID: undefined });
+                await parseRoom.save({ twilioID: "" }, { useMasterKey: true });
             }, { useMasterKey: true });
             await twilioRoom.update({ status: "completed" });
         }

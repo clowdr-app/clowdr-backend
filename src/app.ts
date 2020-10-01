@@ -135,7 +135,7 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
 
 app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
-        console.log(`${req.body.EventType} chat event received for: ${req.body.ChannelSid ?? req.body.Identity}`);
+        // console.log(`${req.body.EventType} chat event received for: ${req.body.ChannelSid ?? req.body.Identity}`);
         await processTwilioChatEvent(req, res);
         return;
     } catch (e) {
@@ -301,15 +301,13 @@ async function processTwilioVideoEvent(req: Express.Request, res: Express.Respon
         console.error("Error processing Twilio video event", err);
     }
 
-    console.log("DONE Twilio video event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
-
     res.status(status);
     res.send(response);
 }
 
 app.post("/twilio/video/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
-        console.log(`${req.body.StatusCallbackEvent} video event received for: ${req.body.RoomSid ?? req.body.Identity}`);
+        // console.log(`${req.body.StatusCallbackEvent} video event received for: ${req.body.RoomSid ?? req.body.Identity}`);
         await processTwilioVideoEvent(req, res);
         return;
     } catch (e) {
@@ -369,7 +367,7 @@ async function runBackend() {
                         await getConference(conf.id);
                         console.log(`Loaded ${name}.`);
                     } catch (err) {
-                        console.error(`Loading ${name} failed.`);
+                        console.error(`Loading ${name} failed.`, err);
                     }
                     console.log("==========================================");
                 }
