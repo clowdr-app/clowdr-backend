@@ -69,6 +69,14 @@ export async function getOrCreateRole(conf: ConferenceT, roleName: RoleNames): P
     return result;
 }
 
+export async function isUserInRoles(userId: string, confId: string, allowedRoles: Array<RoleNames>) {
+    const rolesQ = new Parse.Query(Parse.Role);
+    rolesQ.equalTo("users", new Parse.Object("_User", { id: userId }));
+    rolesQ.equalTo("conference", new Parse.Object("Conference", { id: confId }))
+
+    const roles = await rolesQ.find({ useMasterKey: true });
+    return roles.some(r => allowedRoles.some(allowed => r.get("name") === generateRoleName(confId, allowed)));
+}
 
 // async function sessionTokenIsFromModerator(sessionToken, confID) {
 //     let session = await getSession(sessionToken);

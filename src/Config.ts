@@ -65,6 +65,7 @@ export async function getConfig(confId: string): Promise<ClowdrConfig> {
     }
     assert(process.env.TWILIO_VIDEO_WEBHOOK_URL);
     config.TWILIO_VIDEO_WEBHOOK_URL = process.env.TWILIO_VIDEO_WEBHOOK_URL;
+    console.log(`${confId}:TWILIO_VIDEO_WEBHOOK_URL = ${config.TWILIO_VIDEO_WEBHOOK_URL}`);
 
     // Save the config for future
     conferenceConfigCache.set(confId, config);

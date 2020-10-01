@@ -23,7 +23,7 @@ import {
 } from "./SchemaTypes";
 
 import { handleAddToChat, handleCreateChat, handleGenerateFreshToken as handleGenerateFreshChatToken, handleInviteToChat } from "./Chat";
-import { handleGenerateFreshToken as handleGenerateFreshVideoToken } from "./Video";
+import { handleGenerateFreshToken as handleGenerateFreshVideoToken, handleDeleteVideoRoom } from "./Video";
 import { getConfig } from "./Config";
 
 // Initialise the Express app
@@ -135,16 +135,16 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
 
 app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
     try {
-        console.log(`${req.body.EventType} event received for: ${req.body.ChannelSid ?? req.body.Identity}`);
+        console.log(`${req.body.EventType} chat event received for: ${req.body.ChannelSid ?? req.body.Identity}`);
         await processTwilioChatEvent(req, res);
         return;
     } catch (e) {
-        console.error("Error processing Twilio webhook. Rejecting changes.", e);
+        console.error("Error processing Twilio chat webhook. Rejecting changes.", e);
         res.status(403);
         res.send();
         return;
     }
-})
+});
 
 
 /************************
@@ -275,78 +275,60 @@ app.post('/chat/addMember',
  * Video endpoints *
  *******************/
 
+async function processTwilioVideoEvent(req: Express.Request, res: Express.Response) {
+    const status = 200;
+    const response = {};
+
+    const roomSID = req.body.RoomSid;
+    try {
+        if (req.body.StatusCallbackEvent === 'room-ended') {
+            const roomQ = new Parse.Query(VideoRoom);
+            roomQ.equalTo("twilioID", roomSID);
+            const room = await roomQ.first({ useMasterKey: true });
+            if (room) {
+                if (!room.get("ephemeral")) {
+                    console.log(`Removing Twilio room ID for ${room.get("conference").id}:${room.get("name")}`)
+                    room.set("twilioID", "");
+                    await room.save(null, { useMasterKey: true });
+                } else {
+                    await room.destroy({ useMasterKey: true });
+                }
+            } else {
+                console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
+            }
+        }
+    } catch (err) {
+        console.error("Error processing Twilio video event", err);
+    }
+
+    console.log("DONE Twilio video event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
+
+    res.status(status);
+    res.send(response);
+}
+
+app.post("/twilio/video/event", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
+    try {
+        console.log(`${req.body.StatusCallbackEvent} video event received for: ${req.body.RoomSid ?? req.body.Identity}`);
+        await processTwilioVideoEvent(req, res);
+        return;
+    } catch (e) {
+        console.error("Error processing Twilio video webhook. Rejecting changes.", e);
+        res.status(403);
+        res.send();
+        return;
+    }
+});
+
 app.post('/video/token',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
     handleGenerateFreshVideoToken);
 
-/* Handle video room twilio webhook callback:
-
-//     let roomSID = req.body.RoomSid;
-    //     console.log("Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid)
-    //     try {
-    //         if (req.body.StatusCallbackEvent === 'room-ended') {
-    //             let roomQ = new Parse.Query(VideoRoom);
-    //             roomQ.equalTo("twilioID", roomSID);
-    //             let room = await roomQ.first({ useMasterKey: true });
-    //             if (room) {
-    //                 if (!room.get("ephemeral")) {
-    //                     console.log(`Removing Twilio room ID for ${room.get("name")}`)
-    //                     room.set("twilioID", "");
-    //                     await room.save({}, { useMasterKey: true });
-    //                 } else {
-    //                     await room.destroy({ useMasterKey: true });
-    //                 }
-    //             } else {
-    //                 console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
-    //             }
-    //         }
-    //     } catch (err) {
-    //         console.error("Error processing Twilio event", err);
-    //     }
-
-    //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
- *
- */
-
-// app.post("/video/new", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-//     return await Video.createNewRoom(req, res);
-// });
-
-// app.post('/video/deleteRoom', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
-//     const identity = req.body.identity;
-//     const roomID = req.body.room;
-//     let conf = await getConference(req.body.conference);
-//     try {
-//         const hasAccess = await sessionTokenIsFromModerator(identity, conf.id);
-//         if (!hasAccess) {
-//             res.status(403);
-//             res.send();
-//             return;
-//         }
-//         //First, remove all users.
-//         let roomQ = new Parse.Query(BreakoutRoom);
-//         let room = await roomQ.get(roomID, { useMasterKey: true });
-//         if (!room) {
-//             console.log("Unable to find room:" + roomID)
-//         }
-//         let promises = [];
-//         if (room.get("members")) {
-//             for (let member of room.get("members")) {
-//                 console.log("Kick: " + member.id);
-//                 promises.push(removeFromCall(conf.Twilio, room.get("twilioID"), member.id));
-//             }
-//         }
-//         await Promise.all(promises);
-//         await room.destroy({ useMasterKey: true });
-//         res.send({ status: "OK" });
-//     } catch (err) {
-//         next(err);
-//     }
-//     // newNode[uid] = true;
-//     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
-//     // });
-// });
+app.post('/video/delete',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    handleDeleteVideoRoom);
 
 
 

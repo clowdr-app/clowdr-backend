@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
-import { ConferenceT, VideoRoom, VideoRoomT } from './SchemaTypes';
+import { ConferenceT, Role, VideoRoom, VideoRoomT } from './SchemaTypes';
 
 import { generateVideoToken } from "./tokens";
 
@@ -11,6 +11,8 @@ import Twilio from "twilio";
 import assert from "assert";
 import { ClowdrConfig } from './Config';
 import { RoomInstance } from 'twilio/lib/rest/video/v1/room';
+import { isUserInRole } from './ParseHelpers';
+import { isUserInRoles } from './Roles';
 
 
 export async function getRoom(roomId: string, conf: ConferenceT): Promise<VideoRoomT | undefined> {
@@ -37,6 +39,8 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
             res.send({ status: "Missing room id." });
             return;
         }
+        // This request will ensure we only get the room if it's part of the same
+        // conference as the user profile.
         const room = await getRoom(roomId, conf);
         if (!room) {
             res.status(400);
@@ -108,6 +112,63 @@ async function createTwilioRoom(room: VideoRoomT, config: ClowdrConfig, twilioCl
     return result;
 }
 
+export async function handleDeleteVideoRoom(req: Request, res: Response, next: NextFunction) {
+    try {
+        const requestContext = await handleRequestIntro(req, res, next);
+        if (!requestContext) {
+            return;
+        }
+        const [sessionObj, conf, config, userProfile] = requestContext;
+        const roomId = req.body.room;
+
+        console.log(`${new Date().toUTCString()} [/video/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id}), Room: '${roomId}'`);
+
+        if (!roomId) {
+            res.status(400);
+            res.send({ status: "Missing room id." });
+            return;
+        }
+        // This request will ensure we only get the room if it's part of the same
+        // conference as the user profile.
+        const room = await getRoom(roomId, conf);
+        if (!room) {
+            res.status(400);
+            res.send({ status: "Invalid room." });
+            return;
+        }
+
+        if (!isUserInRoles(sessionObj.get("user").id, conf.id, ["admin", "manager"])) {
+            res.status(403);
+            res.send({ status: "Permission denied." });
+            return;
+        }
+
+        const twilioRoomID = room.get("twilioID");
+        if (twilioRoomID) {
+            // First, kick all the room's participants.
+
+            const accountSID = config.TWILIO_ACCOUNT_SID;
+            const accountAuth = config.TWILIO_AUTH_TOKEN;
+            const twilioClient = Twilio(accountSID, accountAuth);
+
+            const participants = await twilioClient.video.rooms(twilioRoomID).participants.list();
+            await Promise.all(participants.map(async participant => {
+                try {
+                    console.log(`Kick participant ${participant.identity} from ${twilioRoomID} (${room.get("name")})`);
+                    await participant.update({ status: "disconnected" });
+                }
+                catch (e) {
+                    // Might have left the room in the interveaning time
+                }
+            }));
+        }
+
+        await room.destroy({ useMasterKey: true });
+        res.send({ status: "OK" });
+    } catch (err) {
+        next(err);
+    }
+}
 
 
 //////// Old system code ////////
@@ -272,15 +333,6 @@ async function createTwilioRoom(room: VideoRoomT, config: ClowdrConfig, twilioCl
 //     });
 // }
 
-// // async function removeFromCall(Twilio, roomSID, identity) {
-// //     console.log("Kick: " + identity);
-// //     try {
-// //         let participant = await Twilio.video.rooms(roomSID).participants(identity).update({ status: 'disconnected' })
-// //     } catch (err) {
-// //         console.error(err);
-// //         //might not be in room still.
-// //     }
-// // }
 
 // async function updateACL(req, res) {
 //     try {
