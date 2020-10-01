@@ -2,6 +2,7 @@ import Twilio from 'twilio';
 import { ClowdrConfig } from './Config';
 import assert from "assert";
 import { getUserProfileByID } from './ParseHelpers';
+import { VideoRoom } from './SchemaTypes';
 
 
 const twilioClientCache = new Map<string, Twilio.Twilio>();
@@ -89,6 +90,18 @@ Post Webhook URL present: ${!!preWebhookURL}
             }
         }));
         console.log(`Updated Twilio Chat Users (count: ${twilioUsers.length})`);
+
+        // End all existing video rooms (since we can't update their status callback urls)
+        const twilioRooms = await twilioClient.video.rooms.list();
+        for (const twilioRoom of twilioRooms) {
+            const twilioRoomSid = twilioRoom.sid;
+            const parseRoomsQ = new Parse.Query(VideoRoom);
+            parseRoomsQ.equalTo("twilioID", twilioRoomSid);
+            await parseRoomsQ.map(async parseRoom => {
+                await parseRoom.save({ twilioID: undefined });
+            }, { useMasterKey: true });
+            await twilioRoom.update({ status: "completed" });
+        }
     }
     else {
         console.log("Skipping configuring Twilio.");

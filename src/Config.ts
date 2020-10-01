@@ -12,6 +12,7 @@ export type ClowdrConfig = {
     TWILIO_AUTH_TOKEN: string;
     TWILIO_CHAT_SERVICE_SID: string;
     TWILIO_ANNOUNCEMENTS_CHANNEL_SID: string;
+    TWILIO_VIDEO_WEBHOOK_URL: string;
 
     REACT_APP_TWILIO_CALLBACK_URL: string;
     REACT_APP_FRONTEND_URL: string;
@@ -62,6 +63,8 @@ export async function getConfig(confId: string): Promise<ClowdrConfig> {
         config.TWILIO_CHAT_PRE_WEBHOOK_URL = process.env.TWILIO_CHAT_PRE_WEBHOOK_URL;
         config.TWILIO_CHAT_POST_WEBHOOK_URL = process.env.TWILIO_CHAT_POST_WEBHOOK_URL;
     }
+    assert(process.env.TWILIO_VIDEO_WEBHOOK_URL);
+    config.TWILIO_VIDEO_WEBHOOK_URL = process.env.TWILIO_VIDEO_WEBHOOK_URL;
 
     // Save the config for future
     conferenceConfigCache.set(confId, config);

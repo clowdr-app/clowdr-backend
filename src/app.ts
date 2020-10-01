@@ -8,7 +8,7 @@ import BodyParser from "body-parser";
 import Twilio from "twilio";
 // import JWT from 'jsonwebtoken';
 
-import { getSession, getConference, getUserProfile, getUserProfileByID, getRoleByName, isUserInRole } from "./ParseHelpers";
+import { getConference, getUserProfileByID, isUserInRole } from "./ParseHelpers";
 
 // import moment from "moment";
 // import crypto from "crypto";
@@ -22,8 +22,8 @@ import {
     VideoRoom, VideoRoomT
 } from "./SchemaTypes";
 
-import * as Video from "./Video";
-import { handleAddToChat, handleCreateChat, handleGenerateFreshToken, handleInviteToChat } from "./Chat";
+import { handleAddToChat, handleCreateChat, handleGenerateFreshToken as handleGenerateFreshChatToken, handleInviteToChat } from "./Chat";
+import { handleGenerateFreshToken as handleGenerateFreshVideoToken } from "./Video";
 import { getConfig } from "./Config";
 
 // Initialise the Express app
@@ -230,7 +230,7 @@ app.post("/twilio/chat/event", BodyParser.json(), BodyParser.urlencoded({ extend
 app.post('/chat/token',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
-    handleGenerateFreshToken);
+    handleGenerateFreshChatToken);
 
 app.post('/chat/create',
     BodyParser.json(),
@@ -275,6 +275,11 @@ app.post('/chat/addMember',
  * Video endpoints *
  *******************/
 
+app.post('/video/token',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    handleGenerateFreshVideoToken);
+
 /* Handle video room twilio webhook callback:
 
 //     let roomSID = req.body.RoomSid;
@@ -303,17 +308,6 @@ app.post('/chat/addMember',
     //     console.log("DONE Twilio event: " + req.body.StatusCallbackEvent + " " + req.body.RoomSid);
  *
  */
-
-// app.post("/video/token", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
-//     try {
-//         await mintTokenForFrontend(req, res);
-//     } catch (err) {
-//         console.log("Not found when minting")
-//         console.error(err);
-//         res.status(500);
-//         res.send({ status: "error", message: "Internal server error" });
-//     }
-// });
 
 // app.post("/video/new", BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res) => {
 //     return await Video.createNewRoom(req, res);

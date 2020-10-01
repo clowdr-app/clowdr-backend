@@ -2,6 +2,7 @@ import ngrok, { stopNgrok } from './ngrok';
 import runBackend from '../src/app';
 
 const TWILIO_CHAT_EVENT_URL = "/twilio/chat/event";
+const TWILIO_VIDEO_EVENT_URL = "/twilio/video/event";
 const NGROK_STRIP_HHTPS = true;
 
 export default async function startNgrokServer() {
@@ -23,6 +24,8 @@ export default async function startNgrokServer() {
     Note: Settings will be overriden by values in each conference's database
           (see Conference Configuration). If stuff doesn't work as expected, check
           values there first.`);
+        process.env.TWILIO_VIDEO_WEBHOOK_URL = ngrokUrl + TWILIO_VIDEO_EVENT_URL;
+
         process.env.SHOULD_CONFIGURE_TWILIO = "true";
         process.env.TWILIO_CHAT_PRE_WEBHOOK_URL = ngrokUrl + TWILIO_CHAT_EVENT_URL;
         process.env.TWILIO_CHAT_POST_WEBHOOK_URL = ngrokUrl + TWILIO_CHAT_EVENT_URL;

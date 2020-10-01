@@ -2,9 +2,9 @@ import Twilio from 'twilio';
 import { ClowdrConfig } from './Config';
 
 const AccessToken = Twilio.jwt.AccessToken;
-export const { VideoGrant, ChatGrant } = AccessToken;
+const { ChatGrant, VideoGrant } = AccessToken;
 
-export function generateToken(
+function generateToken(
     config: ClowdrConfig,
     identity: string,
     ttl?: number
@@ -20,7 +20,23 @@ export function generateToken(
     );
 }
 
-export function videoToken(
+export function generateChatToken(
+    config: ClowdrConfig,
+    identity: string,
+    sessionID: string,
+    ttl?: number
+) {
+    const now = Date.now();
+    const grant = new ChatGrant({
+        serviceSid: config.TWILIO_CHAT_SERVICE_SID,
+        endpointId: `${identity}:browser:${sessionID}:${now}`
+    });
+    const token = generateToken(config, identity, ttl);
+    token.addGrant(grant);
+    return token;
+};
+
+export function generateVideoToken(
     config: ClowdrConfig,
     identity: string,
     room?: string,

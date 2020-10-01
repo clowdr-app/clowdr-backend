@@ -1,179 +1,286 @@
-import Express from 'express';
-import { getConfig } from './Config';
+import { Request, Response, NextFunction } from 'express';
 
-import { getConference } from "./ParseHelpers";
-import { getTwilioClient } from './Twilio';
+import { ConferenceT, VideoRoom, VideoRoomT } from './SchemaTypes';
 
-// var privilegeRoles = {
-//     "createVideoRoom": null,
-//     "chat": null,
-//     "createVideoRoom-persistent": null,
-//     "createVideoRoom-group": null,
-//     "createVideoRoom-smallgroup": null,
-//     "createVideoRoom-peer-to-peer": null,
-//     'createVideoRoom-private': null,
-//     "moderator": null
-// };
+import { generateVideoToken } from "./tokens";
 
-export async function createNewRoom(req: Express.Request, res: Express.Response) {
-    const token = req.body.identity;
-    const confID = req.body.conference;
+import { callWithRetry, handleRequestIntro } from './RequestHelpers';
 
-    console.log(`[Create new room]: Fetching conference ${confID}`);
-    const conf = await getConference(confID);
-    if (!conf) {
-        console.warn('[Create new room]: Request did not include conference id.');
-        return;
-    }
-
-    console.log("[Create new room]: Got conference")
-    const roomName = req.body.room;
-
-    const config = await getConfig(confID);
-    const twilio = await getTwilioClient(confID, config);
-
-    const visibility = req.body.visibility;
-    let mode = req.body.mode;
-    let persistence = req.body.emphemeral;
-
-    const socialSpaceID = req.body.socialSpace;
-    if (!mode)
-        mode = "group-small";
-    if (!persistence)
-        persistence = "ephemeral";
+import Parse from "parse/node";
+import Twilio from "twilio";
+import assert from "assert";
+import { ClowdrConfig } from './Config';
+import { RoomInstance } from 'twilio/lib/rest/video/v1/room';
 
 
-    try {
-        const query = new Parse.Query(Parse.Session);
-        // console.log(token);
-        query.include("user");
-        query.equalTo("sessionToken", token);
-        const session = await query.first({ useMasterKey: true });
-        console.log("Create new room: Got user from session token")
-        if (session) {
-            const parseUser = session.get("user");
-            // Validate has privileges for conference
-            const accesToConf = new Parse.Query(ConferencePermission);
-            accesToConf.equalTo("conference", conf);
-            accesToConf.equalTo("action", privilegeRoles.createVideoRoom);
-            console.log('--> ' + JSON.stringify(privilegeRoles.createVideoRoom));
-            // TODO access-check for each option, too, but I don't have time now...
-            const hasAccess = await accesToConf.first({ sessionToken: token });
-            console.log('Permission to create video room? ' + hasAccess);
-            if (hasAccess && hasAccess.id) {
-                // Try to create the room
-                try {
-                    console.log("creating room with callback" + conf.config.TWILIO_CALLBACK_URL)
-                    console.log("For " + parseUser.id + ": " + parseUser.get("displayname"))
-                    console.log(roomName)
-                    const maxParticipants = (mode === "peer-to-peer" ? 10 : (mode === "group-small" ? 4 : 10));
-                    const twilioRoom = await twilio.video.rooms.create({
-                        type: mode,
-                        uniqueName: roomName,
-                        maxParticipants,
-                        statusCallback: conf.config.TWILIO_CALLBACK_URL
-                    });
-                    // Create a chat room too
-
-                    const chat = twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
-
-
-                    // Create a new room in the DB
-                    const parseRoom = new BreakoutRoom();
-                    parseRoom.set("title", roomName);
-                    parseRoom.set("conference", conf);
-                    parseRoom.set("twilioID", twilioRoom.sid);
-                    parseRoom.set("isPrivate", visibility === "unlisted");
-                    parseRoom.set("persistence", persistence);
-                    parseRoom.set("mode", mode);
-                    parseRoom.set("capacity", maxParticipants);
-                    if (socialSpaceID) {
-                        const socialSpace = new SocialSpace();
-                        socialSpace.id = socialSpaceID;
-                        parseRoom.set("socialSpace", socialSpace);
-                    }
-                    const modRole = await getOrCreateRole(conf.id, "moderator");
-
-                    const acl = new Parse.ACL();
-                    acl.setPublicReadAccess(false);
-                    acl.setPublicWriteAccess(false);
-                    acl.setRoleReadAccess(modRole, true);
-                    if (visibility === "unlisted") {
-                        acl.setReadAccess(parseUser.id, true);
-                    }
-                    else {
-                        acl.setRoleReadAccess(await getOrCreateRole(conf.id, "conference"), true);
-                    }
-                    parseRoom.setACL(acl, { useMasterKey: true });
-                    await parseRoom.save({}, { useMasterKey: true });
-                    const attributes = {
-                        category: "breakoutRoom",
-                        roomID: parseRoom.id
-                    }
-
-                    const twilioChatRoom = await chat.channels.create({
-                        friendlyName: roomName,
-                        attributes: JSON.stringify(attributes),
-                        type:
-                            (visibility === "unlisted" ? "private" : "public")
-                    });
-                    if (visibility === "unlisted") {
-                        // give this user access to the chat
-                        const userProfile = await getUserProfile(parseUser.id, conf);
-                        console.log("Creating chat room for " + roomName + " starting user " + userProfile.id)
-                        await chat.channels(twilioChatRoom.sid).members.create({ identity: userProfile.id });
-                        // Make sure that all moderators and admins have access to this room, too.
-                        const modRole = await getOrCreateRole(conf.id, "moderator");
-                        const userQuery = modRole.getUsers().query();
-                        const profilesQuery = new Parse.Query(UserProfile);
-                        profilesQuery.equalTo("conference", conf);
-                        profilesQuery.matchesQuery("user", userQuery);
-                        profilesQuery.find({ useMasterKey: true }).then((users) => {
-                            for (const user of users) {
-                                chat.channels(twilioChatRoom.sid).members.create({ identity: user.id });
-                            }
-                        })
-                    }
-                    parseRoom.set("twilioChatID", twilioChatRoom.sid);
-                    await parseRoom.save({}, { useMasterKey: true });
-                    sidToRoom[twilioRoom.sid] = parseRoom;
-                    conf.rooms.push(parseRoom);
-                    return res.send({ status: "OK" });
-                } catch (err) {
-                    console.error(err);
-                    return res.send({
-                        status: "error",
-                        message: "There is already a video room with this name (although it may be private, and you can't see it). Please either join the existing room or pick a new name."
-                    });
-                }
-            } else {
-                return res.send({
-                    status: "error",
-                    message: "Sorry, you do not currently have access to create video rooms for " + conf.get("conferenceName")
-                });
-            }
-
-        }
-    } catch (err) {
-        console.error(err);
-        return res.send({ status: "error", message: "Internal server error " });
-    }
-    return res.send({
-        status: "error",
-        message: "Could not find enrollment for this user on this conference, " + conf
-    });
+export async function getRoom(roomId: string, conf: ConferenceT): Promise<VideoRoomT | undefined> {
+    const uq = new Parse.Query(VideoRoom);
+    uq.equalTo("conference", conf);
+    return uq.get(roomId, { useMasterKey: true });
 }
 
-// async function removeFromCall(Twilio, roomSID, identity) {
-//     console.log("Kick: " + identity);
+export async function handleGenerateFreshToken(req: Request, res: Response, next: NextFunction) {
+    try {
+        const requestContext = await handleRequestIntro(req, res, next);
+        if (!requestContext) {
+            return;
+        }
+        const [sessionObj, conf, config, userProfile] = requestContext;
+        const roomId = req.body.room;
+
+        console.log(`${new Date().toUTCString()} [/video/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id}), Room: '${roomId}'`);
+
+        const identity = userProfile.id;
+        const sessionID = sessionObj.id;
+        if (!roomId) {
+            res.status(400);
+            res.send({ status: "Missing room id." });
+            return;
+        }
+        const room = await getRoom(roomId, conf);
+        if (!room) {
+            res.status(400);
+            res.send({ status: "Invalid room." });
+            return;
+        }
+
+        let twilioRoomId = room.get("twilioID");
+        if (!twilioRoomId) {
+            if (!room.get("ephemeral")) {
+                // Create the room in Twilio
+
+                const accountSID = config.TWILIO_ACCOUNT_SID;
+                const accountAuth = config.TWILIO_AUTH_TOKEN;
+                const twilioClient = Twilio(accountSID, accountAuth);
+
+                let twilioRoom: RoomInstance;
+                try {
+                    twilioRoom = await createTwilioRoom(room, config, twilioClient);
+                } catch (err) {
+                    // If an error ocurred making the Twilio room, someone else might have updated it.
+                    try {
+                        twilioRoom = await twilioClient.video.rooms(room.get("name")).fetch();
+                    }
+                    catch (innerErr) {
+                        console.error(`Error creating Twilio room: ${err}`);
+                        res.status(500);
+                        res.send({ status: "Could not create or get Twilio room." });
+                        return;
+                    }
+                }
+
+                twilioRoomId = twilioRoom.sid;
+                room.set("twilioID", twilioRoomId);
+                await room.save(null, { useMasterKey: true });
+            } else {
+                res.status(404);
+                res.send({ status: "Room no longer exists." });
+                return;
+            }
+        }
+
+        assert(twilioRoomId);
+
+        // TODO: Put Twilio token TTL (time-to-live) into configuration in database
+        const expiryDistanceSeconds = 3600 * 4;
+        const accessToken = generateVideoToken(config, identity, twilioRoomId, expiryDistanceSeconds);
+        res.set('Content-Type', 'application/json');
+        res.send(JSON.stringify({
+            token: accessToken.toJwt(),
+            identity,
+            roomName: room.get("name"),
+            expiry: new Date().getTime() + (expiryDistanceSeconds * 1000)
+        }));
+    } catch (err) {
+        next(err);
+    }
+}
+
+async function createTwilioRoom(room: VideoRoomT, config: ClowdrConfig, twilioClient: Twilio.Twilio) {
+    console.log(`Creating Twilio room for VideoRoom: ${room.id}`);
+    const result = await twilioClient.video.rooms.create({
+        type: "group",
+        uniqueName: room.get("name"),
+        maxParticipants: room.get("capacity"),
+        statusCallback: config.TWILIO_VIDEO_WEBHOOK_URL
+    });
+    console.log(`Twilio room created: ${result.sid}`);
+    return result;
+}
+
+
+
+//////// Old system code ////////
+
+// // var privilegeRoles = {
+// //     "createVideoRoom": null,
+// //     "chat": null,
+// //     "createVideoRoom-persistent": null,
+// //     "createVideoRoom-group": null,
+// //     "createVideoRoom-smallgroup": null,
+// //     "createVideoRoom-peer-to-peer": null,
+// //     'createVideoRoom-private': null,
+// //     "moderator": null
+// // };
+
+// export async function createNewRoom(req: Express.Request, res: Express.Response) {
+//     const token = req.body.identity;
+//     const confID = req.body.conference;
+
+//     console.log(`[Create new room]: Fetching conference ${confID}`);
+//     const conf = await getConference(confID);
+//     if (!conf) {
+//         console.warn('[Create new room]: Request did not include conference id.');
+//         return;
+//     }
+
+//     console.log("[Create new room]: Got conference")
+//     const roomName = req.body.room;
+
+//     const config = await getConfig(confID);
+//     const twilio = await getTwilioClient(confID, config);
+
+//     const visibility = req.body.visibility;
+//     let mode = req.body.mode;
+//     let persistence = req.body.emphemeral;
+
+//     const socialSpaceID = req.body.socialSpace;
+//     if (!mode)
+//         mode = "group-small";
+//     if (!persistence)
+//         persistence = "ephemeral";
+
+
 //     try {
-//         let participant = await Twilio.video.rooms(roomSID).participants(identity).update({ status: 'disconnected' })
+//         const query = new Parse.Query(Parse.Session);
+//         // console.log(token);
+//         query.include("user");
+//         query.equalTo("sessionToken", token);
+//         const session = await query.first({ useMasterKey: true });
+//         console.log("Create new room: Got user from session token")
+//         if (session) {
+//             const parseUser = session.get("user");
+//             // Validate has privileges for conference
+//             const accesToConf = new Parse.Query(ConferencePermission);
+//             accesToConf.equalTo("conference", conf);
+//             accesToConf.equalTo("action", privilegeRoles.createVideoRoom);
+//             console.log('--> ' + JSON.stringify(privilegeRoles.createVideoRoom));
+//             // TODO access-check for each option, too, but I don't have time now...
+//             const hasAccess = await accesToConf.first({ sessionToken: token });
+//             console.log('Permission to create video room? ' + hasAccess);
+//             if (hasAccess && hasAccess.id) {
+//                 // Try to create the room
+//                 try {
+//                     console.log("creating room with callback" + conf.config.TWILIO_CALLBACK_URL)
+//                     console.log("For " + parseUser.id + ": " + parseUser.get("displayname"))
+//                     console.log(roomName)
+//                     const maxParticipants = (mode === "peer-to-peer" ? 10 : (mode === "group-small" ? 4 : 10));
+//                     const twilioRoom = await twilio.video.rooms.create({
+//                         type: mode,
+//                         uniqueName: roomName,
+//                         maxParticipants,
+//                         statusCallback: conf.config.TWILIO_CALLBACK_URL
+//                     });
+//                     // Create a chat room too
+
+//                     const chat = twilio.chat.services(conf.config.TWILIO_CHAT_SERVICE_SID);
+
+
+//                     // Create a new room in the DB
+//                     const parseRoom = new BreakoutRoom();
+//                     parseRoom.set("title", roomName);
+//                     parseRoom.set("conference", conf);
+//                     parseRoom.set("twilioID", twilioRoom.sid);
+//                     parseRoom.set("isPrivate", visibility === "unlisted");
+//                     parseRoom.set("persistence", persistence);
+//                     parseRoom.set("mode", mode);
+//                     parseRoom.set("capacity", maxParticipants);
+//                     if (socialSpaceID) {
+//                         const socialSpace = new SocialSpace();
+//                         socialSpace.id = socialSpaceID;
+//                         parseRoom.set("socialSpace", socialSpace);
+//                     }
+//                     const modRole = await getOrCreateRole(conf.id, "moderator");
+
+//                     const acl = new Parse.ACL();
+//                     acl.setPublicReadAccess(false);
+//                     acl.setPublicWriteAccess(false);
+//                     acl.setRoleReadAccess(modRole, true);
+//                     if (visibility === "unlisted") {
+//                         acl.setReadAccess(parseUser.id, true);
+//                     }
+//                     else {
+//                         acl.setRoleReadAccess(await getOrCreateRole(conf.id, "conference"), true);
+//                     }
+//                     parseRoom.setACL(acl, { useMasterKey: true });
+//                     await parseRoom.save({}, { useMasterKey: true });
+//                     const attributes = {
+//                         category: "breakoutRoom",
+//                         roomID: parseRoom.id
+//                     }
+
+//                     const twilioChatRoom = await chat.channels.create({
+//                         friendlyName: roomName,
+//                         attributes: JSON.stringify(attributes),
+//                         type:
+//                             (visibility === "unlisted" ? "private" : "public")
+//                     });
+//                     if (visibility === "unlisted") {
+//                         // give this user access to the chat
+//                         const userProfile = await getUserProfile(parseUser.id, conf);
+//                         console.log("Creating chat room for " + roomName + " starting user " + userProfile.id)
+//                         await chat.channels(twilioChatRoom.sid).members.create({ identity: userProfile.id });
+//                         // Make sure that all moderators and admins have access to this room, too.
+//                         const modRole = await getOrCreateRole(conf.id, "moderator");
+//                         const userQuery = modRole.getUsers().query();
+//                         const profilesQuery = new Parse.Query(UserProfile);
+//                         profilesQuery.equalTo("conference", conf);
+//                         profilesQuery.matchesQuery("user", userQuery);
+//                         profilesQuery.find({ useMasterKey: true }).then((users) => {
+//                             for (const user of users) {
+//                                 chat.channels(twilioChatRoom.sid).members.create({ identity: user.id });
+//                             }
+//                         })
+//                     }
+//                     parseRoom.set("twilioChatID", twilioChatRoom.sid);
+//                     await parseRoom.save({}, { useMasterKey: true });
+//                     sidToRoom[twilioRoom.sid] = parseRoom;
+//                     conf.rooms.push(parseRoom);
+//                     return res.send({ status: "OK" });
+//                 } catch (err) {
+//                     console.error(err);
+//                     return res.send({
+//                         status: "error",
+//                         message: "There is already a video room with this name (although it may be private, and you can't see it). Please either join the existing room or pick a new name."
+//                     });
+//                 }
+//             } else {
+//                 return res.send({
+//                     status: "error",
+//                     message: "Sorry, you do not currently have access to create video rooms for " + conf.get("conferenceName")
+//                 });
+//             }
+
+//         }
 //     } catch (err) {
 //         console.error(err);
-//         //might not be in room still.
+//         return res.send({ status: "error", message: "Internal server error " });
 //     }
+//     return res.send({
+//         status: "error",
+//         message: "Could not find enrollment for this user on this conference, " + conf
+//     });
 // }
-// var uidToProfileCache = {};
+
+// // async function removeFromCall(Twilio, roomSID, identity) {
+// //     console.log("Kick: " + identity);
+// //     try {
+// //         let participant = await Twilio.video.rooms(roomSID).participants(identity).update({ status: 'disconnected' })
+// //     } catch (err) {
+// //         console.error(err);
+// //         //might not be in room still.
+// //     }
+// // }
 
 // async function updateACL(req, res) {
 //     try {
@@ -248,93 +355,3 @@ export async function createNewRoom(req: Express.Request, res: Express.Response)
 //         res.send({ status: "error", message: "Internal server error" });
 //     }
 // }
-
-// async function createTwilioRoomForParseRoom(parseRoom, conf) {
-//     let twilioRoom = await conf.Twilio.video.rooms.create({
-//         type: parseRoom.get("mode"),
-//         uniqueName: parseRoom.get("title"),
-//         statusCallback: conf.config.TWILIO_CALLBACK_URL
-//     });
-//     return twilioRoom;
-// }
-
-// async function mintTokenForFrontend(req, res) {
-//     let identity = req.body.identity;
-//     console.log("Token requested by " + identity)
-//     const room = req.body.room;
-//     const conference = req.body.conference;
-//     let conf = await getConference(conference);
-//     if (!conf.config.TWILIO_ACCOUNT_SID) {
-//         res.status(403);
-//         console.log("Received invalid conference request: ");
-//         console.log(req.body);
-//         res.send({ status: "error", message: "Conference not configured." })
-//         return;
-//     }
-//     let userQ = new Parse.Query(Parse.Session);
-//     userQ.equalTo("sessionToken", identity);
-//     // userQ.include(["user.displayname"]);
-//     // console.log(identity)
-//     let parseSession = await userQ.first({ useMasterKey: true });
-//     let parseUser = parseSession.get("user");
-//     let userProfileQ = new Parse.Query(UserProfile);
-//     userProfileQ.equalTo("user", parseUser);
-//     userProfileQ.equalTo("conference", conf);
-//     let userProfile = await userProfileQ.first({ useMasterKey: true });
-//     identity = userProfile.id;
-
-//     // console.log("Get token for video for " + identity + " " + room)
-//     if (!room) {
-//         res.status(404);
-//         res.error();
-//     }
-//     let query = new Parse.Query("BreakoutRoom");
-//     let roomData = await query.get(room, { sessionToken: req.body.identity });
-//     if (!roomData.get("twilioID")) {
-//         if (roomData.get("persistence") === "persistent") {
-//             //Create a new Twilio room
-//             try {
-//                 let twilioRoom = await createTwilioRoomForParseRoom(roomData, conf);
-//                 roomData.set("twilioID", twilioRoom.sid);
-//                 await roomData.save({}, { useMasterKey: true });
-//                 sidToRoom[twilioRoom.sid] = roomData;
-//             } catch (err) {
-//                 //If an error ocurred making the Twilio room, someone else must have updated it.
-//                 console.error(err);
-//                 let twilioRoom = await conf.Twilio.video.rooms(roomData.get("title")).fetch();
-//                 roomData.set("twilioID", twilioRoom.sid)
-//                 await roomData.save({}, { useMasterKey: true });
-//                 sidToRoom[twilioRoom.sid] = roomData;
-//             }
-//         } else {
-//             res.status(404);
-//             return res.send({ message: "This room has been deleted" });
-//         }
-//     }
-//     let newNode = {};
-//     if (!roomData) {
-//         res.status(403);
-//         res.error();
-//     }
-//     const token = videoToken(identity, roomData.get('twilioID'), conf.config);
-//     // console.log("Sent response" + token);
-//     sendTokenResponse(token, roomData.get('title'), res);
-
-//     // newNode[uid] = true;
-//     // let membersRef = roomRef.child("members").child(uid).set(true).then(() => {
-//     // });
-// }
-
-function sendTokenResponse(
-    token: AccessToken,
-    roomName: string,
-    res: Express.Response<any>
-) {
-    res.set('Content-Type', 'application/json');
-    res.send(
-        JSON.stringify({
-            token: token.toJwt(),
-            roomName
-        })
-    );
-};

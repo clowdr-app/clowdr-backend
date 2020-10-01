@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@clowdr-app/clowdr-db-schema": "^1.2.2",
+    "@clowdr-app/clowdr-db-schema": "^1.2.5",
     "@types/cors": "^2.8.7",
     "@types/jsonwebtoken": "^8.5.0",
     "@types/parse": "^2.12.5",

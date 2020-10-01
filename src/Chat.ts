@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
-import { ChatGrant, generateToken } from "./tokens";
+import { generateChatToken } from "./tokens";
 
 import { callWithRetry, handleRequestIntro } from './RequestHelpers';
 import { getUserProfileByID } from './ParseHelpers';
@@ -24,16 +24,10 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
 
         const identity = userProfile.id;
         const sessionID = sessionObj.id;
-        const now = Date.now();
-        const chatGrant = new ChatGrant({
-            serviceSid: config.TWILIO_CHAT_SERVICE_SID,
-            endpointId: `${identity}:browser:${sessionID}:${now}`
-        });
 
         // TODO: Put Twilio token TTL (time-to-live) into configuration in database
         const expiryDistanceSeconds = 3600 * 3;
-        const accessToken = generateToken(config, identity, expiryDistanceSeconds);
-        accessToken.addGrant(chatGrant);
+        const accessToken = generateChatToken(config, identity, sessionID, expiryDistanceSeconds);
         res.set('Content-Type', 'application/json');
         res.send(JSON.stringify({
             token: accessToken.toJwt(),
