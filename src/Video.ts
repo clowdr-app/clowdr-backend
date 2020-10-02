@@ -92,6 +92,7 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
         res.send(JSON.stringify({
             token: accessToken.toJwt(),
             identity,
+            twilioRoomId,
             roomName: room.get("name"),
             expiry: new Date().getTime() + (expiryDistanceSeconds * 1000)
         }));
