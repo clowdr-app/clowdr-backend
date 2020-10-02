@@ -281,7 +281,8 @@ async function processTwilioVideoEvent(req: Express.Request, res: Express.Respon
 
     const roomSID = req.body.RoomSid;
     try {
-        if (req.body.StatusCallbackEvent === 'room-ended') {
+        const event = req.body.StatusCallbackEvent;
+        if (event === "room-ended") {
             const roomQ = new Parse.Query(VideoRoom);
             roomQ.equalTo("twilioID", roomSID);
             const room = await roomQ.first({ useMasterKey: true });
@@ -295,6 +296,38 @@ async function processTwilioVideoEvent(req: Express.Request, res: Express.Respon
                 }
             } else {
                 console.warn(`Unable to destroy room ${roomSID} because it doesn't exist in Parse.`);
+            }
+        }
+        else if (event === "participant-connected") {
+            const roomQ = new Parse.Query(VideoRoom);
+            roomQ.equalTo("twilioID", roomSID);
+            const room = await roomQ.first({ useMasterKey: true });
+            if (room) {
+                const participantIds = room.get("participants");
+                const connectedProfileId = req.body.ParticipantIdentity;
+                if (!participantIds.includes(connectedProfileId)) {
+                    await room.save({
+                        participants: [...participantIds, connectedProfileId]
+                    }, {
+                        useMasterKey: true
+                    });
+                }
+            }
+        }
+        else if (event === "participant-disconnected") {
+            const roomQ = new Parse.Query(VideoRoom);
+            roomQ.equalTo("twilioID", roomSID);
+            const room = await roomQ.first({ useMasterKey: true });
+            if (room) {
+                const participantIds = room.get("participants");
+                const disconnectedProfileId = req.body.ParticipantIdentity;
+                if (participantIds.includes(disconnectedProfileId)) {
+                    await room.save({
+                        participants: participantIds.filter(x => x !== disconnectedProfileId)
+                    }, {
+                        useMasterKey: true
+                    });
+                }
             }
         }
     } catch (err) {
