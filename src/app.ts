@@ -8,7 +8,8 @@ import BodyParser from "body-parser";
 import Twilio from "twilio";
 // import JWT from 'jsonwebtoken';
 
-import { getConference, getUserProfileByID, isUserInRole } from "./ParseHelpers";
+import { getConference, getUserProfileByID } from "./ParseHelpers";
+import { isUserInRole } from "./Roles";
 
 // import moment from "moment";
 // import crypto from "crypto";

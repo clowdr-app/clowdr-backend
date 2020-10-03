@@ -1,5 +1,6 @@
 import { RoleNames } from "@clowdr-app/clowdr-db-schema/build/DataLayer/Schema/_Role";
 import { ConferenceT, Role, RoleT } from "./SchemaTypes";
+import assert from "assert";
 
 function generateRoleName(confId: string, roleName: RoleNames): string {
     return confId + "-" + roleName;
@@ -67,6 +68,23 @@ export async function getOrCreateRole(conf: ConferenceT, roleName: RoleNames): P
         throw new Error(`Unable to create role: ${err}`);
     }
     return result;
+}
+
+export async function getRoleByName(name: string, conf: ConferenceT): Promise<RoleT> {
+    const uq = new Parse.Query(Role);
+    uq.equalTo("name", conf.id + "-" + name);
+    uq.equalTo("conference", conf);
+    const result = await uq.first({ useMasterKey: true });
+    assert(result, "All roles should exist.");
+    return result;
+}
+
+export async function isUserInRole(role: string | RoleT, userId: string, conf: ConferenceT): Promise<boolean> {
+    if (typeof role === "string") {
+        role = await getRoleByName(role, conf);
+    }
+    const roleUsersQuery = role.getUsers().query();
+    return (await roleUsersQuery.equalTo("id", userId).count({ useMasterKey: true })) > 0;
 }
 
 export async function isUserInRoles(userId: string, confId: string, allowedRoles: Array<RoleNames>) {

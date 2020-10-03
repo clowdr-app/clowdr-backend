@@ -4,7 +4,6 @@ import { getConfig } from "./Config";
 import { initChatRooms } from "./InitConference";
 import { Conference, ConferenceT, User, UserT, UserProfile, UserProfileT, RoleT, Role } from "./SchemaTypes";
 import { configureTwilio } from "./Twilio";
-import assert from "assert";
 
 export async function getSession(token: string): Promise<Parse.Session | null> {
     const query = new Parse.Query(Parse.Session);
@@ -65,23 +64,6 @@ export async function getUserProfileByUserID(userId: string, conf: ConferenceT):
     uq.equalTo("user", fauxUser);
     uq.equalTo("conference", conf);
     return uq.first({ useMasterKey: true });
-}
-
-export async function getRoleByName(name: string, conf: ConferenceT): Promise<RoleT> {
-    const uq = new Parse.Query(Role);
-    uq.equalTo("name", conf.id + "-" + name);
-    uq.equalTo("conference", conf);
-    const result = await uq.first({ useMasterKey: true });
-    assert(result, "All roles should exist.");
-    return result;
-}
-
-export async function isUserInRole(role: string | RoleT, userId: string, conf: ConferenceT): Promise<boolean> {
-    if (typeof role === "string") {
-        role = await getRoleByName(role, conf);
-    }
-    const roleUsersQuery = role.getUsers().query();
-    return (await roleUsersQuery.equalTo("id", userId).count({ useMasterKey: true })) > 0;
 }
 
 // var allUsersPromise;

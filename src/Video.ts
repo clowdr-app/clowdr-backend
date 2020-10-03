@@ -11,14 +11,13 @@ import Twilio from "twilio";
 import assert from "assert";
 import { ClowdrConfig } from './Config';
 import { RoomInstance } from 'twilio/lib/rest/video/v1/room';
-import { isUserInRole } from './ParseHelpers';
 import { isUserInRoles } from './Roles';
 
 
-export async function getRoom(roomId: string, conf: ConferenceT): Promise<VideoRoomT | undefined> {
+export async function getRoom(roomId: string, conf: ConferenceT, sessionToken?: string): Promise<VideoRoomT | undefined> {
     const uq = new Parse.Query(VideoRoom);
     uq.equalTo("conference", conf);
-    return uq.get(roomId, { useMasterKey: true });
+    return uq.get(roomId, sessionToken ? { sessionToken } : { useMasterKey: true });
 }
 
 export async function handleGenerateFreshToken(req: Request, res: Response, next: NextFunction) {
@@ -27,10 +26,8 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
         if (!requestContext) {
             return;
         }
-        const [sessionObj, conf, config, userProfile] = requestContext;
+        const { sessionToken, sessionObj, conf, config, userProfile } = requestContext;
         const roomId = req.body.room;
-
-        console.log(`${new Date().toUTCString()} [/video/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id}), Room: '${roomId}'`);
 
         const identity = userProfile.id;
         const sessionID = sessionObj.id;
@@ -40,47 +37,56 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
             return;
         }
         // This request will ensure we only get the room if it's part of the same
-        // conference as the user profile.
-        const room = await getRoom(roomId, conf);
+        // conference as the user profile, and the user has ACL rights to it.
+        let room;
+        try {
+            room = await getRoom(roomId, conf, sessionToken);
+        }
+        catch (e) {
+            if (e.toString().toLowerCase().includes("object not found")) {
+                res.status(400);
+                res.send({ status: "Invalid room." });
+                return;
+            }
+            else {
+                throw e;
+            }
+        }
         if (!room) {
             res.status(400);
             res.send({ status: "Invalid room." });
             return;
         }
 
+        console.log(`${new Date().toUTCString()} [/video/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id}), Room: '${roomId}'`);
+
         let twilioRoomId = room.get("twilioID");
         if (!twilioRoomId) {
-            if (!room.get("ephemeral")) {
-                // Create the room in Twilio
+            // Create the room in Twilio
 
-                const accountSID = config.TWILIO_ACCOUNT_SID;
-                const accountAuth = config.TWILIO_AUTH_TOKEN;
-                const twilioClient = Twilio(accountSID, accountAuth);
+            const accountSID = config.TWILIO_ACCOUNT_SID;
+            const accountAuth = config.TWILIO_AUTH_TOKEN;
+            const twilioClient = Twilio(accountSID, accountAuth);
 
-                let twilioRoom: RoomInstance;
+            let twilioRoom: RoomInstance;
+            try {
+                twilioRoom = await createTwilioRoom(room, config, twilioClient);
+            } catch (err) {
+                // If an error ocurred making the Twilio room, someone else might have updated it.
                 try {
-                    twilioRoom = await createTwilioRoom(room, config, twilioClient);
-                } catch (err) {
-                    // If an error ocurred making the Twilio room, someone else might have updated it.
-                    try {
-                        twilioRoom = await twilioClient.video.rooms(room.get("name")).fetch();
-                    }
-                    catch (innerErr) {
-                        console.error(`Error creating Twilio room: ${err}`);
-                        res.status(500);
-                        res.send({ status: "Could not create or get Twilio room." });
-                        return;
-                    }
+                    twilioRoom = await twilioClient.video.rooms(room.get("name")).fetch();
                 }
-
-                twilioRoomId = twilioRoom.sid;
-                room.set("twilioID", twilioRoomId);
-                await room.save(null, { useMasterKey: true });
-            } else {
-                res.status(404);
-                res.send({ status: "Room no longer exists." });
-                return;
+                catch (innerErr) {
+                    console.error(`Error creating Twilio room: ${err}`);
+                    res.status(500);
+                    res.send({ status: "Could not create or get Twilio room." });
+                    return;
+                }
             }
+
+            twilioRoomId = twilioRoom.sid;
+            room.set("twilioID", twilioRoomId);
+            await room.save(null, { useMasterKey: true });
         }
 
         assert(twilioRoomId);
@@ -119,7 +125,7 @@ export async function handleDeleteVideoRoom(req: Request, res: Response, next: N
         if (!requestContext) {
             return;
         }
-        const [sessionObj, conf, config, userProfile] = requestContext;
+        const { sessionObj, conf, config, userProfile } = requestContext;
         const roomId = req.body.room;
 
         console.log(`${new Date().toUTCString()} [/video/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id}), Room: '${roomId}'`);

@@ -18,7 +18,7 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
         if (!requestContext) {
             return;
         }
-        const [sessionObj, conf, config, userProfile] = requestContext;
+        const { sessionObj, conf, config, userProfile } = requestContext;
 
         console.log(`${new Date().toUTCString()} [/chat/token]: User: '${userProfile.get("displayName")}' (${userProfile.id}), Conference: '${conf.get("name")}' (${conf.id})`);
 
@@ -78,7 +78,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         if (!requestContext) {
             return;
         }
-        const [sessionObj, conf, config, userProfile] = requestContext;
+        const { conf, config, userProfile } = requestContext;
 
         const _userProfileIdsToInvite = req.body.invite;
         const mode = req.body.mode;

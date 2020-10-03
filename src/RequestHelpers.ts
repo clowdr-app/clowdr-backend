@@ -24,7 +24,13 @@ export async function callWithRetry<T>(f: () => Promise<T>): Promise<T> {
 }
 
 export async function handleRequestIntro(req: Request, res: Response, next: NextFunction):
-    Promise<[Parse.Session, ConferenceT, ClowdrConfig, UserProfileT] | undefined> {
+    Promise<{
+        sessionToken: string,
+        sessionObj: Parse.Session,
+        conf: ConferenceT,
+        config: ClowdrConfig,
+        userProfile: UserProfileT
+    } | undefined> {
     let ok = true;
     const sessionToken = req.body.identity;
     const sessionObj = await getSession(sessionToken);
@@ -53,7 +59,9 @@ export async function handleRequestIntro(req: Request, res: Response, next: Next
             return undefined;
         }
 
-        return [sessionObj, conf, config, userProfile];
+        return {
+            sessionToken, sessionObj, conf, config, userProfile
+        };
     }
     catch (e) {
         ok = false;
