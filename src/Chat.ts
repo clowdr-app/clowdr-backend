@@ -1,3 +1,4 @@
+import Parse from "parse/node";
 import { Request, Response, NextFunction } from 'express';
 
 import { generateChatToken } from "./tokens";

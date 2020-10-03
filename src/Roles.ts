@@ -1,6 +1,7 @@
 import { RoleNames } from "@clowdr-app/clowdr-db-schema/build/DataLayer/Schema/_Role";
 import { ConferenceT, Role, RoleT } from "./SchemaTypes";
 import assert from "assert";
+import Parse from "parse/node";
 
 function generateRoleName(confId: string, roleName: RoleNames): string {
     return confId + "-" + roleName;

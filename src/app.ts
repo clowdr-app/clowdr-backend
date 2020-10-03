@@ -95,6 +95,7 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
                 assert(accouncementsUserRole);
 
                 const isAdmin = await isUserInRole("admin", targetUser.id, conference);
+                console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel.`);
                 await twilioChannelCtx.members.create({
                     identity: targetUserProfile.id,
                     roleSid: isAdmin

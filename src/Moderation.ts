@@ -1,3 +1,4 @@
+import Parse from "parse/node";
 
 // async function getModeratorChannel(conf) {
 //     return conf.moderatorChannel;

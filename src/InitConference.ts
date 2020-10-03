@@ -1,3 +1,4 @@
+import Parse from "parse/node";
 import { ConferenceT } from "./SchemaTypes";
 
 // async function populateActiveChannels(conf: ConferenceT) {

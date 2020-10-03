@@ -1,3 +1,4 @@
+import Parse from "parse/node";
 import { Request, Response, NextFunction } from 'express';
 
 import { getSession, getConference, getUserProfile } from "./ParseHelpers";
