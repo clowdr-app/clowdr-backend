@@ -29,7 +29,8 @@
     ]
   },
   "scripts": {
-    "start": "node-env-run -E .env ./src/run.ts --exec \"ts-node\"",
+    "start": "ts-node ./src/run.ts",
+    "dev": "node-env-run -E .env ./src/run.ts --exec \"ts-node\"",
     "ngrok": "node-env-run -E .env ./scripts/startNgrokAndServer.ts --exec \"ts-node\""
   },
   "homepage": "https://icse2020.clowdr.org/",
