@@ -269,10 +269,124 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
  *  - identity: session token
  *  - conference: conference id
  *  - channel: Channel sid,
- *  - targetIdentity: Id of user profile to invite
+ *  - targetIdentities: Ids of the user profiles to invite
  */
 export async function handleInviteToChat(req: Request, res: Response, next: NextFunction) {
-    // TODO: Re-use code from create
+    try {
+        const requestContext = await handleRequestIntro(req, res, next);
+        if (!requestContext) {
+            return;
+        }
+        const { conf, config, userProfile } = requestContext;
+
+        const _userProfileIdsToInvite = req.body.targetIdentities;
+        const channelSID = req.body.channel;
+
+        // Validate inputs
+        if (!_userProfileIdsToInvite || !channelSID) {
+            res.status(400);
+            res.send({ status: "Missing request parameter(s)." });
+            return;
+        }
+
+        if (typeof channelSID !== "string") {
+            res.status(400);
+            res.send({ status: "Channel should be a string." });
+            return;
+        }
+
+        if (!(_userProfileIdsToInvite instanceof Array)) {
+            res.status(400);
+            res.send({ status: "Invited members should be an array." });
+            return;
+        }
+
+        for (const inviteId of _userProfileIdsToInvite) {
+            if (typeof inviteId !== "string") {
+                res.status(400);
+                res.send({ status: "Invited member ids should be strings." });
+                return;
+            }
+        }
+
+        const userProfileIdsToInvite = _userProfileIdsToInvite.filter(x => x !== userProfile.id) as string[];
+
+        if (userProfileIdsToInvite.length === 0) {
+            res.status(400);
+            res.send({ status: "Invited members should be a non-empty array (that does not include yourself)." });
+            return;
+        }
+
+        const _userProfilesToInvite = await Promise.all(
+            userProfileIdsToInvite.map(async id => {
+                return getUserProfileByID(id, conf);
+            }));
+
+        const usersValid = _userProfilesToInvite.every(x => !!x);
+        if (!usersValid) {
+            res.status(400);
+            res.send({ status: "Users to invite invalid." });
+            return;
+        }
+        const userProfilesToInvite = _userProfilesToInvite as Array<UserProfileT>;
+
+        const accountSID = config.TWILIO_ACCOUNT_SID;
+        const accountAuth = config.TWILIO_AUTH_TOKEN;
+        const twilioClient = Twilio(accountSID, accountAuth);
+        const serviceSID = config.TWILIO_CHAT_SERVICE_SID;
+
+        const existingChannel
+            = await twilioClient.chat
+                .services(serviceSID)
+                .channels(channelSID)
+                .fetch();
+
+        const service = twilioClient.chat.services(serviceSID);
+        const roles = await service.roles.list();
+        const channelAdminRole = roles.find(x => x.friendlyName === "channel admin");
+        const channelUserRole = roles.find(x => x.friendlyName === "channel user");
+
+        assert(channelAdminRole);
+        assert(channelUserRole);
+
+        if (existingChannel) {
+            const attributes = JSON.parse(existingChannel.attributes);
+            if (!attributes.isDM) {
+                const members = (await existingChannel.members().list()).map(x => x.identity);
+                const invites = (await existingChannel.invites().list()).map(x => x.identity);
+
+                if (members.includes(userProfile.id)) {
+                    await Promise.all(userProfilesToInvite.map(async profile => {
+                        if (!members.includes(profile.id) && !invites.includes(profile.id)) {
+                            await callWithRetry(() => existingChannel.invites().create({
+                                identity: profile.id,
+                                // TODO: If is admin, set as admin role
+                                roleSid: channelUserRole.sid
+                            }));
+                        }
+                    }));
+
+                    res.status(200);
+                    res.send({});
+                    return;
+                }
+                else {
+                    res.status(403);
+                    res.send("Access denied.");
+                }
+            }
+            else {
+                res.status(400);
+                res.send("Cannot invite more users to a DM chat.");
+            }
+        }
+        else {
+            res.status(500);
+            res.send("Channel not found.");
+        }
+    } catch (err) {
+        next(err);
+    }
 }
 
 /**
