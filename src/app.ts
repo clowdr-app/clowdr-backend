@@ -23,7 +23,7 @@ import {
     VideoRoom, VideoRoomT
 } from "./SchemaTypes";
 
-import { handleAddToChat, handleCreateChat, handleGenerateFreshToken as handleGenerateFreshChatToken, handleInviteToChat } from "./Chat";
+import { handleAddReaction, handleAddToChat, handleCreateChat, handleGenerateFreshToken as handleGenerateFreshChatToken, handleInviteToChat, handleRemoveReaction } from "./Chat";
 import { handleGenerateFreshToken as handleGenerateFreshVideoToken, handleDeleteVideoRoom } from "./Video";
 import { getConfig } from "./Config";
 
@@ -248,6 +248,16 @@ app.post('/chat/addMember',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
     handleAddToChat);
+
+app.post('/chat/react',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    handleAddReaction);
+
+app.post('/chat/tcaer',
+    BodyParser.json(),
+    BodyParser.urlencoded({ extended: false }),
+    handleRemoveReaction);
 
 // // TODO: Can't we control this through Twilio permissions?
 // app.post('/chat/deleteMessage', BodyParser.json(), BodyParser.urlencoded({ extended: false }), async (req, res, next) => {
