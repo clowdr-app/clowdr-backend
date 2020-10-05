@@ -9,7 +9,7 @@ import { getUserProfileByID } from './ParseHelpers';
 import Twilio from "twilio";
 import { UserProfileT } from './SchemaTypes';
 
-import uuid from "uuid";
+import { v4 as uuidv4 } from "uuid";
 import assert from "assert";
 import { ServiceContext } from 'twilio/lib/rest/chat/v2/service';
 import { getTwilioClient } from "./Twilio";
@@ -150,7 +150,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
                 ? (userProfile.id.localeCompare(userProfilesToInvite[0].id) === -1
                     ? userProfile.id + "-" + userProfilesToInvite[0].id
                     : userProfilesToInvite[0].id + "-" + userProfile.id)
-                : (userProfile.id + "-" + uuid.v4()))
+                : (userProfile.id + "-" + uuidv4()))
                 .substr(0, 64);
         const friendlyName = isDM ? uniqueName : title;
         const createdBy = isDM ? "system" : userProfile.id;
