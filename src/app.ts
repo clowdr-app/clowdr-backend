@@ -9,7 +9,7 @@ import Twilio from "twilio";
 // import JWT from 'jsonwebtoken';
 
 import { getConference, getUserProfileByID } from "./ParseHelpers";
-import { isUserInRole } from "./Roles";
+import { isUserInRoles } from "./Roles";
 
 // import moment from "moment";
 // import crypto from "crypto";
@@ -94,8 +94,8 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
                 assert(accouncementsAdminRole);
                 assert(accouncementsUserRole);
 
-                const isAdmin = await isUserInRole("admin", targetUser.id, conference);
-                console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel.`);
+                const isAdmin = await isUserInRoles(targetUser.id, conference.id, ["admin"]);
+                console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel as ${isAdmin ? "admin" : "user"}.`);
                 try {
                     await twilioChannelCtx.members.create({
                         identity: targetUserProfile.id,

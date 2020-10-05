@@ -80,14 +80,6 @@ export async function getRoleByName(name: string, conf: ConferenceT): Promise<Ro
     return result;
 }
 
-export async function isUserInRole(role: string | RoleT, userId: string, conf: ConferenceT): Promise<boolean> {
-    if (typeof role === "string") {
-        role = await getRoleByName(role, conf);
-    }
-    const roleUsersQuery = role.getUsers().query();
-    return await roleUsersQuery.reduce<boolean>((acc, x) => acc || x.id === userId, false);
-}
-
 export async function isUserInRoles(userId: string, confId: string, allowedRoles: Array<RoleNames>) {
     const rolesQ = new Parse.Query(Parse.Role);
     rolesQ.equalTo("users", new Parse.Object("_User", { id: userId }));
