@@ -96,12 +96,22 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
 
                 const isAdmin = await isUserInRole("admin", targetUser.id, conference);
                 console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel.`);
-                await twilioChannelCtx.members.create({
-                    identity: targetUserProfile.id,
-                    roleSid: isAdmin
-                        ? accouncementsAdminRole.sid
-                        : accouncementsUserRole.sid
-                });
+                try {
+                    await twilioChannelCtx.members.create({
+                        identity: targetUserProfile.id,
+                        roleSid: isAdmin
+                            ? accouncementsAdminRole.sid
+                            : accouncementsUserRole.sid
+                    });
+                }
+                catch {
+                    // UI beat us to it
+                    await twilioChannelCtx.members(targetUserProfile.id).update({
+                        roleSid: isAdmin
+                            ? accouncementsAdminRole.sid
+                            : accouncementsUserRole.sid
+                    });
+                }
             }
 
             // Ensure friendly_name is set properly

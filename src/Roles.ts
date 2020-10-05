@@ -85,7 +85,7 @@ export async function isUserInRole(role: string | RoleT, userId: string, conf: C
         role = await getRoleByName(role, conf);
     }
     const roleUsersQuery = role.getUsers().query();
-    return (await roleUsersQuery.equalTo("id", userId).count({ useMasterKey: true })) > 0;
+    return await roleUsersQuery.reduce<boolean>((acc, x) => acc || x.id === userId, false);
 }
 
 export async function isUserInRoles(userId: string, confId: string, allowedRoles: Array<RoleNames>) {
