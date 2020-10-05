@@ -89,12 +89,21 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
             });
             if (members.length === 0) {
                 const roles = await twilioChatService.roles.list();
+                const serviceAdminRole = roles.find(x => x.friendlyName === "service admin");
                 const accouncementsAdminRole = roles.find(x => x.friendlyName === "announcements admin");
                 const accouncementsUserRole = roles.find(x => x.friendlyName === "announcements user");
+                assert(serviceAdminRole);
                 assert(accouncementsAdminRole);
                 assert(accouncementsUserRole);
 
                 const isAdmin = await isUserInRoles(targetUser.id, conference.id, ["admin"]);
+
+                if (isAdmin) {
+                    await twilioChatService.users(targetUserProfile.id).update({
+                        roleSid: serviceAdminRole.sid
+                    });
+                }
+
                 console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel as ${isAdmin ? "admin" : "user"}.`);
                 try {
                     await twilioChannelCtx.members.create({
