@@ -23,7 +23,7 @@ import {
     VideoRoom, VideoRoomT
 } from "./SchemaTypes";
 
-import { handleAddReaction, handleAddToChat, handleCreateChat, handleGenerateFreshToken as handleGenerateFreshChatToken, handleInviteToChat, handleRemoveReaction } from "./Chat";
+import { handleAddReaction, handleCreateChat, handleGenerateFreshToken as handleGenerateFreshChatToken, handleInviteToChat, handleRemoveReaction } from "./Chat";
 import { handleGenerateFreshToken as handleGenerateFreshVideoToken, handleDeleteVideoRoom } from "./Video";
 import { getConfig } from "./Config";
 
@@ -262,11 +262,6 @@ app.post('/chat/invite',
     BodyParser.json(),
     BodyParser.urlencoded({ extended: false }),
     handleInviteToChat);
-
-app.post('/chat/addMember',
-    BodyParser.json(),
-    BodyParser.urlencoded({ extended: false }),
-    handleAddToChat);
 
 app.post('/chat/react',
     BodyParser.json(),

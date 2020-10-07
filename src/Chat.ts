@@ -1,5 +1,5 @@
 import Parse from "parse/node";
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, request } from 'express';
 
 import { generateChatToken } from "./tokens";
 
@@ -7,12 +7,14 @@ import { callWithRetry, handleRequestIntro } from './RequestHelpers';
 import { getUserProfileByID } from './ParseHelpers';
 
 import Twilio from "twilio";
-import { UserProfileT } from './SchemaTypes';
+import { ConferenceT, TextChat, TextChatT, UserProfileT } from './SchemaTypes';
 
 import { v4 as uuidv4 } from "uuid";
 import assert from "assert";
 import { ServiceContext } from 'twilio/lib/rest/chat/v2/service';
 import { getTwilioClient } from "./Twilio";
+import { getRoleByName, isUserInRoles } from "./Roles";
+import { ChannelInstance } from "twilio/lib/rest/chat/v2/service/channel";
 
 export async function handleGenerateFreshToken(req: Request, res: Response, next: NextFunction) {
     try {
@@ -45,7 +47,6 @@ async function ensureTwilioUsersExist(service: ServiceContext, profiles: Array<U
     const existingUserProfileIds = (await service.users.list()).map(x => x.identity);
     await Promise.all(profiles.map(x => {
         if (!existingUserProfileIds.includes(x.id)) {
-            // TODO: Rely on `onUserAdded` to set their service-level role correctly (e.g. for admin users)
             return service.users.create({
                 identity: x.id,
                 friendlyName: x.get("displayName")
@@ -58,6 +59,69 @@ async function ensureTwilioUsersExist(service: ServiceContext, profiles: Array<U
 // TODO: Ensure we extract common functionality (e.g. adding members to a channel)
 //       into functions.
 
+async function getOrCreateTextChat(newChannel: ChannelInstance, conf: ConferenceT, isDM: boolean) {
+    const textChatQ = new Parse.Query(TextChat);
+    textChatQ.equalTo("conference", conf);
+    textChatQ.equalTo("twilioID", newChannel.sid);
+    let textChat = await textChatQ.first({ useMasterKey: true });
+    if (!textChat) {
+        textChat = new TextChat();
+        textChat.set("autoWatch", isDM);
+        textChat.set("twilioID", newChannel.sid);
+        textChat.set("conference", conf);
+        textChat.set("mirrored", false);
+        textChat.set("name", newChannel.friendlyName);
+        const newACLs = new Parse.ACL();
+        textChat.setACL(newACLs);
+        textChat.save(null, { useMasterKey: true });
+    }
+    return textChat;
+}
+
+async function updateTextChatACLs(newChannel: ChannelInstance, textChat: TextChatT, isPrivate?: boolean) {
+    const conf = textChat.get("conference") as ConferenceT;
+    const attendeeRole = await getRoleByName("attendee", conf);
+    const managerRole = await getRoleByName("manager", conf);
+    const adminRole = await getRoleByName("admin", conf);
+
+    if (isPrivate === undefined) {
+        const existingACL = textChat.getACL();
+        isPrivate = existingACL?.getRoleReadAccess(attendeeRole) ?? false;
+    }
+
+    const acl = new Parse.ACL();
+    acl.setPublicReadAccess(false);
+    acl.setPublicWriteAccess(false);
+
+    acl.setRoleReadAccess(managerRole, true);
+    acl.setRoleWriteAccess(managerRole, true);
+
+    acl.setRoleReadAccess(adminRole, true);
+    acl.setRoleWriteAccess(adminRole, true);
+
+    if (isPrivate) {
+        const members = await newChannel.members().list();
+        const invited = await newChannel.invites().list();
+
+        const memberIds = members.map(x => x.identity);
+        const invitedIds = invited.map(x => x.identity);
+        const allIds = memberIds.concat(invitedIds);
+
+        await Promise.all(allIds.map(async profileId => {
+            const profile = await getUserProfileByID(profileId, conf);
+            if (profile) {
+                acl.setReadAccess(profile.get("user") as any, true);
+            }
+        }));
+    }
+    else {
+        acl.setRoleReadAccess(attendeeRole, true);
+    }
+
+    textChat.setACL(acl);
+    await textChat.save(null, { useMasterKey: true });
+}
+
 /**
  * Request body:
  *  - identity: session token
@@ -65,6 +129,7 @@ async function ensureTwilioUsersExist(service: ServiceContext, profiles: Array<U
  *  - invite: user profile ids to invite
  *  - mode: 'public' or 'private'
  *  - title: friendly name
+ *  - forVideoRoom?: optional boolean - cancels DM mode
  */
 export async function handleCreateChat(req: Request, res: Response, next: NextFunction) {
     try {
@@ -109,12 +174,6 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
 
         const userProfileIdsToInvite = _userProfileIdsToInvite.filter(x => x !== userProfile.id) as string[];
 
-        if (userProfileIdsToInvite.length === 0) {
-            res.status(400);
-            res.send({ status: "Invited members should be a non-empty array (not including the creator)." });
-            return;
-        }
-
         if (mode !== "public" && mode !== "private") {
             res.status(400);
             res.send({ status: "Mode should be 'public' or 'private'." });
@@ -143,7 +202,7 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         const userProfilesToInvite = _userProfilesToInvite as Array<UserProfileT>;
 
         const isPrivate = mode === "private";
-        const isDM = isPrivate && userProfilesToInvite.length === 1;
+        const isDM = isPrivate && userProfilesToInvite.length === 1 && (req.body.forVideoRoom !== true);
         // Twilio max-length 64 chars
         const uniqueName
             = (isDM
@@ -178,36 +237,33 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
         assert(channelAdminRole);
         assert(channelUserRole);
 
+        let newChannel: ChannelInstance;
         if (existingChannels.length > 0) {
-            const newChannel = existingChannels[0];
+            newChannel = existingChannels[0];
 
             const members = (await newChannel.members().list()).map(x => x.identity);
             const invites = (await newChannel.invites().list()).map(x => x.identity);
 
             if (!members.includes(userProfile.id)) {
+                const userIsManager = isUserInRoles(userProfile.get("user").id, conf.id, ["admin", "manager"]);
                 await callWithRetry(() => newChannel.members().create({
                     identity: userProfile.id,
-                    // TODO: If is admin, set as admin role
-                    roleSid: isDM ? channelUserRole.sid : channelAdminRole.sid
+                    roleSid: isDM && !userIsManager ? channelUserRole.sid : channelAdminRole.sid
                 }));
             }
 
             await Promise.all(userProfilesToInvite.map(async profile => {
                 if (!members.includes(profile.id) && !invites.includes(profile.id)) {
+                    const userIsManager = isUserInRoles(profile.get("user").id, conf.id, ["admin", "manager"]);
                     await callWithRetry(() => newChannel.invites().create({
                         identity: profile.id,
-                        // TODO: If is admin, set as admin role
-                        roleSid: channelUserRole.sid
+                        roleSid: userIsManager ? channelAdminRole.sid : channelUserRole.sid
                     }));
                 }
             }));
-
-            res.status(200);
-            res.send({ channelSID: newChannel.sid });
-            return;
         }
         else {
-            const newChannel = await callWithRetry(() => service.channels.create({
+            newChannel = await callWithRetry(() => service.channels.create({
                 friendlyName,
                 uniqueName,
                 createdBy,
@@ -218,25 +274,23 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
             try {
                 await ensureTwilioUsersExist(service, [...userProfilesToInvite, userProfile]);
 
-                await callWithRetry(() => newChannel.members().create({
-                    identity: userProfile.id,
-                    // TODO: If is admin, set as admin role
-                    roleSid: isDM ? channelUserRole.sid : channelAdminRole.sid
-                }));
+                {
+                    const userIsManager = isUserInRoles(userProfile.get("user").id, conf.id, ["admin", "manager"]);
+                    await callWithRetry(() => newChannel.members().create({
+                        identity: userProfile.id,
+                        roleSid: isDM && !userIsManager ? channelUserRole.sid : channelAdminRole.sid
+                    }));
+                }
 
                 await Promise.all(userProfilesToInvite.map(async profile => {
+                    const userIsManager = isUserInRoles(profile.get("user").id, conf.id, ["admin", "manager"]);
                     await callWithRetry(() => newChannel.invites().create({
                         identity: profile.id,
-                        // TODO: If is admin, set as admin role
-                        roleSid: channelUserRole.sid
+                        roleSid: userIsManager ? channelAdminRole.sid : channelUserRole.sid
                     }));
                 }));
 
                 console.log(`Created channel '${friendlyName}' (${newChannel.sid})`);
-
-                res.status(200);
-                res.send({ channelSID: newChannel.sid });
-                return;
             }
             catch (e) {
                 console.error("Could not create channel", e);
@@ -248,6 +302,13 @@ export async function handleCreateChat(req: Request, res: Response, next: NextFu
                 return;
             }
         }
+
+        const textChat = await getOrCreateTextChat(newChannel, conf, isDM);
+        await updateTextChatACLs(newChannel, textChat, isPrivate);
+
+        res.status(200);
+        res.send({ channelSID: newChannel.sid, textChatID: textChat.id });
+        return;
     }
     catch (e) {
         next(e);
@@ -358,13 +419,16 @@ export async function handleInviteToChat(req: Request, res: Response, next: Next
                 if (members.includes(userProfile.id)) {
                     await Promise.all(userProfilesToInvite.map(async profile => {
                         if (!members.includes(profile.id) && !invites.includes(profile.id)) {
+                            const userIsManager = isUserInRoles(profile.get("user").id, conf.id, ["admin", "manager"]);
                             await callWithRetry(() => existingChannel.invites().create({
                                 identity: profile.id,
-                                // TODO: If is admin, set as admin role
-                                roleSid: channelUserRole.sid
+                                roleSid: userIsManager ? channelAdminRole.sid : channelUserRole.sid
                             }));
                         }
                     }));
+
+                    const textChat = await getOrCreateTextChat(existingChannel, conf, attributes.isDM);
+                    await updateTextChatACLs(existingChannel, textChat);
 
                     res.status(200);
                     res.send({});
@@ -387,19 +451,6 @@ export async function handleInviteToChat(req: Request, res: Response, next: Next
     } catch (err) {
         next(err);
     }
-}
-
-/**
- * Add a user as a member directly into a chat.
- *
- * Request body:
- *  - identity: session token
- *  - conference: conference id
- *  - channel: Channel sid,
- *  - targetIdentity: Id of user profile to add
- */
-export async function handleAddToChat(req: Request, res: Response, next: NextFunction) {
-    // TODO: Re-use code from create
 }
 
 /**
