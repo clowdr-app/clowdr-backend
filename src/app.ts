@@ -66,93 +66,102 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
         case "onUserAdded":
             const targetUserProfileId = req.body.Identity;
             const targetUserProfile = await getUserProfileByID(targetUserProfileId);
-            if (!targetUserProfile || targetUserProfile.get("isBanned")) {
+            if (!targetUserProfile) {
                 throw new Error("Invalid target user profile ID.");
             }
 
-            const conference = targetUserProfile.get("conference") as ConferenceT;
-            const config = await getConfig(conference.id);
-            {
-                const expectedTwilioAccountSID = config.TWILIO_ACCOUNT_SID;
-                const expectedTwilioInstanceSID = config.TWILIO_CHAT_SERVICE_SID;
-                assert(twilioAccountSID === expectedTwilioAccountSID, "Unexpected Twilio account SID.");
-                assert(twilioInstanceSID === expectedTwilioInstanceSID, "Unexpected Twilio chat service SID.");
+            if (targetUserProfile.get("isBanned")) {
+                const conference = targetUserProfile.get("conference") as ConferenceT;
+                const config = await getConfig(conference.id);
+                const twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
+                const twilioChatService = twilioClient.chat.services(config.TWILIO_CHAT_SERVICE_SID);
+                await twilioChatService.users(targetUserProfile.id).remove();
             }
+            else {
+                const conference = targetUserProfile.get("conference") as ConferenceT;
+                const config = await getConfig(conference.id);
+                {
+                    const expectedTwilioAccountSID = config.TWILIO_ACCOUNT_SID;
+                    const expectedTwilioInstanceSID = config.TWILIO_CHAT_SERVICE_SID;
+                    assert(twilioAccountSID === expectedTwilioAccountSID, "Unexpected Twilio account SID.");
+                    assert(twilioInstanceSID === expectedTwilioInstanceSID, "Unexpected Twilio chat service SID.");
+                }
 
-            const targetUser = targetUserProfile.get("user") as UserT;
-            const isAdmin = await isUserInRoles(targetUser.id, conference.id, ["admin"]);
-            const isManager = await isUserInRoles(targetUser.id, conference.id, ["manager"]);
+                const targetUser = targetUserProfile.get("user") as UserT;
+                const isAdmin = await isUserInRoles(targetUser.id, conference.id, ["admin"]);
+                const isManager = await isUserInRoles(targetUser.id, conference.id, ["manager"]);
 
-            const twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
-            const twilioChatService = twilioClient.chat.services(config.TWILIO_CHAT_SERVICE_SID);
+                const twilioClient = Twilio(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN);
+                const twilioChatService = twilioClient.chat.services(config.TWILIO_CHAT_SERVICE_SID);
 
-            const roles = await twilioChatService.roles.list();
-            const serviceAdminRole = roles.find(x => x.friendlyName === "service admin");
-            assert(serviceAdminRole);
+                const roles = await twilioChatService.roles.list();
+                const serviceAdminRole = roles.find(x => x.friendlyName === "service admin");
+                assert(serviceAdminRole);
 
-            if (isAdmin) {
-                await twilioChatService.users(targetUserProfile.id).update({
-                    roleSid: serviceAdminRole.sid
-                });
-            }
-
-            // Add to Announcements channel if necessary
-            const announcementsTwilioChannelCtx = twilioChatService.channels(config.TWILIO_ANNOUNCEMENTS_CHANNEL_SID);
-            const announcementsMembers = await announcementsTwilioChannelCtx.members.list({
-                identity: targetUserProfile.id
-            });
-            if (announcementsMembers.length === 0) {
-                const announcementsAdminRole = roles.find(x => x.friendlyName === "announcements admin");
-                const announcementsUserRole = roles.find(x => x.friendlyName === "announcements user");
-                assert(announcementsAdminRole);
-                assert(announcementsUserRole);
-
-                console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel as ${isAdmin ? "admin" : "user"}.`);
-                try {
-                    await announcementsTwilioChannelCtx.members.create({
-                        identity: targetUserProfile.id,
-                        roleSid: isAdmin
-                            ? announcementsAdminRole.sid
-                            : announcementsUserRole.sid
+                if (isAdmin) {
+                    await twilioChatService.users(targetUserProfile.id).update({
+                        roleSid: serviceAdminRole.sid
                     });
                 }
-                catch {
-                    // UI beat us to it
-                    await announcementsTwilioChannelCtx.members(targetUserProfile.id).update({
-                        roleSid: isAdmin
-                            ? announcementsAdminRole.sid
-                            : announcementsUserRole.sid
-                    });
-                }
-            }
 
-            if (isAdmin || isManager) {
-                // Add to Moderation Hub
-                const moderationTextChatQ = new Parse.Query("TextChat");
-                moderationTextChatQ.equalTo("conference", conference);
-                moderationTextChatQ.equalTo("mode", "moderation_hub");
-                const moderationTextChat = await moderationTextChatQ.first({ useMasterKey: true });
-                assert(moderationTextChat);
-                const moderationTwilioChannelCtx = twilioChatService.channels(moderationTextChat.get("twilioID"));
-
-                const moderationMembers = await announcementsTwilioChannelCtx.members.list({
+                // Add to Announcements channel if necessary
+                const announcementsTwilioChannelCtx = twilioChatService.channels(config.TWILIO_ANNOUNCEMENTS_CHANNEL_SID);
+                const announcementsMembers = await announcementsTwilioChannelCtx.members.list({
                     identity: targetUserProfile.id
                 });
-                if (moderationMembers.length === 0) {
-                    const channelUserRole = roles.find(x => x.friendlyName === "channel user");
-                    assert(channelUserRole);
+                if (announcementsMembers.length === 0) {
+                    const announcementsAdminRole = roles.find(x => x.friendlyName === "announcements admin");
+                    const announcementsUserRole = roles.find(x => x.friendlyName === "announcements user");
+                    assert(announcementsAdminRole);
+                    assert(announcementsUserRole);
 
-                    console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to moderation hub as user.`);
+                    console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to announcements channel as ${isAdmin ? "admin" : "user"}.`);
                     try {
-                        await moderationTwilioChannelCtx.members.create({
+                        await announcementsTwilioChannelCtx.members.create({
                             identity: targetUserProfile.id,
-                            roleSid: channelUserRole.sid
+                            roleSid: isAdmin
+                                ? announcementsAdminRole.sid
+                                : announcementsUserRole.sid
                         });
                     }
                     catch {
-                        await moderationTwilioChannelCtx.members(targetUserProfile.id).update({
-                            roleSid: channelUserRole.sid
+                        // UI beat us to it
+                        await announcementsTwilioChannelCtx.members(targetUserProfile.id).update({
+                            roleSid: isAdmin
+                                ? announcementsAdminRole.sid
+                                : announcementsUserRole.sid
                         });
+                    }
+                }
+
+                if (isAdmin || isManager) {
+                    // Add to Moderation Hub
+                    const moderationTextChatQ = new Parse.Query("TextChat");
+                    moderationTextChatQ.equalTo("conference", conference);
+                    moderationTextChatQ.equalTo("mode", "moderation_hub");
+                    const moderationTextChat = await moderationTextChatQ.first({ useMasterKey: true });
+                    assert(moderationTextChat);
+                    const moderationTwilioChannelCtx = twilioChatService.channels(moderationTextChat.get("twilioID"));
+
+                    const moderationMembers = await announcementsTwilioChannelCtx.members.list({
+                        identity: targetUserProfile.id
+                    });
+                    if (moderationMembers.length === 0) {
+                        const channelUserRole = roles.find(x => x.friendlyName === "channel user");
+                        assert(channelUserRole);
+
+                        console.log(`Adding ${targetUserProfile.get("displayName")} (${targetUserProfileId}) to moderation hub as user.`);
+                        try {
+                            await moderationTwilioChannelCtx.members.create({
+                                identity: targetUserProfile.id,
+                                roleSid: channelUserRole.sid
+                            });
+                        }
+                        catch {
+                            await moderationTwilioChannelCtx.members(targetUserProfile.id).update({
+                                roleSid: channelUserRole.sid
+                            });
+                        }
                     }
                 }
             }
