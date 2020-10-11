@@ -98,7 +98,7 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
                 const serviceAdminRole = roles.find(x => x.friendlyName === "service admin");
                 assert(serviceAdminRole);
 
-                if (isAdmin) {
+                if (isAdmin || isManager) {
                     await twilioChatService.users(targetUserProfile.id).update({
                         roleSid: serviceAdminRole.sid
                     });
