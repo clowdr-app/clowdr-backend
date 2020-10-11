@@ -53,7 +53,7 @@ export async function handleRequestIntro(req: Request, res: Response, next: Next
         conf = await getConference(req.body.conference);
         config = await getConfig(conf.id);
         const userProfile = await getUserProfile(sessionObj.get("user"), conf);
-        if (!userProfile) {
+        if (!userProfile || userProfile.get("isBanned")) {
             ok = false;
             res.status(403);
             res.send({ status: "Permission denied." })

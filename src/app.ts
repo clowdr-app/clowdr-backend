@@ -66,7 +66,7 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
         case "onUserAdded":
             const targetUserProfileId = req.body.Identity;
             const targetUserProfile = await getUserProfileByID(targetUserProfileId);
-            if (!targetUserProfile) {
+            if (!targetUserProfile || targetUserProfile.get("isBanned")) {
                 throw new Error("Invalid target user profile ID.");
             }
 
@@ -95,9 +95,6 @@ async function processTwilioChatEvent(req: Express.Request, res: Express.Respons
                     roleSid: serviceAdminRole.sid
                 });
             }
-
-            // TODO MODERATION: Add admins to moderation hub
-            // TODO MODERATION: Add managers to moderation hub
 
             // Add to Announcements channel if necessary
             const announcementsTwilioChannelCtx = twilioChatService.channels(config.TWILIO_ANNOUNCEMENTS_CHANNEL_SID);
