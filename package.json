@@ -32,7 +32,9 @@
   "scripts": {
     "start": "ts-node ./src/run.ts",
     "dev": "node-env-run -E .env ./src/run.ts --exec \"ts-node\"",
-    "ngrok": "node-env-run -E .env ./scripts/startNgrokAndServer.ts --exec \"ts-node\""
+    "ngrok": "node-env-run -E .env ./scripts/startNgrokAndServer.ts --exec \"ts-node\"",
+    "purge-twilio-chat": "node-env-run -E .env ./scripts/purge-twilio-chat.ts --exec \"ts-node\"",
+    "purge-twilio-chat-production": "node-env-run -E .env.production.local ./scripts/purge-twilio-chat.ts --exec \"ts-node\""
   },
   "homepage": "https://icse2020.clowdr.org/",
   "devDependencies": {
