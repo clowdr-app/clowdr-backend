@@ -70,28 +70,6 @@ Post Webhook URL present: ${!!preWebhookURL}
             webhookFilters: TWILIO_WEBHOOK_EVENTS,
         }).then(service => console.log(`Updated Twilio Chat Service: ${service.friendlyName}`));
 
-        const twilioUsers = await chatService.users.list();
-        await Promise.all(twilioUsers.map(async twilioUser => {
-            try {
-                const profileId = twilioUser.identity;
-                const profile = await getUserProfileByID(profileId);
-                assert(profile);
-                if (twilioUser.friendlyName !== profile.get("displayName")) {
-                    return twilioUser.update({
-                        friendlyName: profile?.get("displayName")
-                    });
-                }
-                else {
-                    return Promise.resolve();
-                }
-            }
-            catch (e) {
-                console.error(`Error updating profile ${twilioUser.identity} (${twilioUser.sid})`, e);
-                return Promise.resolve();
-            }
-        }));
-        console.log(`Updated Twilio Chat Users (count: ${twilioUsers.length})`);
-
         // End all existing video rooms (since we can't update their status callback urls)
         const twilioRooms = await twilioClient.video.rooms.list();
         for (const twilioRoom of twilioRooms) {
