@@ -13,6 +13,9 @@ import { ClowdrConfig } from './Config';
 import { RoomInstance } from 'twilio/lib/rest/video/v1/room';
 import { isUserInRoles } from './Roles';
 
+function generateTwilioRoomName(room: VideoRoomT) {
+    return room.get("name").substr(0, 128);
+}
 
 export async function getRoom(roomId: string, conf: ConferenceT, sessionToken?: string): Promise<VideoRoomT | undefined> {
     const uq = new Parse.Query(VideoRoom);
@@ -74,7 +77,7 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
             } catch (err) {
                 // If an error ocurred making the Twilio room, someone else might have updated it.
                 try {
-                    twilioRoom = await twilioClient.video.rooms(room.get("name")).fetch();
+                    twilioRoom = await twilioClient.video.rooms(generateTwilioRoomName(room)).fetch();
                 }
                 catch (innerErr) {
                     console.error(`Error creating Twilio room: ${err}`);
@@ -99,7 +102,7 @@ export async function handleGenerateFreshToken(req: Request, res: Response, next
             token: accessToken.toJwt(),
             identity,
             twilioRoomId,
-            roomName: room.get("name"),
+            roomName: generateTwilioRoomName(room),
             expiry: new Date().getTime() + (expiryDistanceSeconds * 1000)
         }));
     } catch (err) {
@@ -111,7 +114,7 @@ async function createTwilioRoom(room: VideoRoomT, config: ClowdrConfig, twilioCl
     console.log(`Creating Twilio room for VideoRoom: ${room.id}`);
     const result = await twilioClient.video.rooms.create({
         type: "group",
-        uniqueName: room.get("name"),
+        uniqueName: generateTwilioRoomName(room),
         maxParticipants: room.get("capacity"),
         statusCallback: config.TWILIO_VIDEO_WEBHOOK_URL
     });
@@ -161,7 +164,7 @@ export async function handleDeleteVideoRoom(req: Request, res: Response, next: N
             const participants = await twilioClient.video.rooms(twilioRoomID).participants.list();
             await Promise.all(participants.map(async participant => {
                 try {
-                    console.log(`Kick participant ${participant.identity} from ${twilioRoomID} (${room.get("name")})`);
+                    console.log(`Kick participant ${participant.identity} from ${twilioRoomID} (${generateTwilioRoomName(room)})`);
                     await participant.update({ status: "disconnected" });
                 }
                 catch (e) {
