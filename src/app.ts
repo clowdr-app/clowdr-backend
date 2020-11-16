@@ -466,7 +466,7 @@ async function processTwilioVideoEvent(req: Express.Request, res: Express.Respon
                 if (!room.get("ephemeral")) {
                     console.log(`Removing Twilio room ID for ${room.get("conference").id}:${room.get("name")}`)
                     room.set("twilioID", "");
-                    await room.save(null, { useMasterKey: true });
+                    await room.save({ participants: [] }, { useMasterKey: true });
                 } else {
                     await room.destroy({ useMasterKey: true });
                 }
