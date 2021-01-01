@@ -1,4 +1,13 @@
-# clowdr-backend
+# [Deprecated] clowdr-backend
+
+The backend service for Clowdr versions 1 and 2 live(d) in this repository, which we're keeping here
+for anyone using it. The new development of Clowdr is over in the
+[clowdr repo](https://github.com/clowdr-app/clowdr).
+
+Suggestions and relevant contributions and issues from this repository will gradually
+be carried over into the new repository as we progress the redevelopment.
+
+---
 
 Token server and REST services for Clowdr
 
